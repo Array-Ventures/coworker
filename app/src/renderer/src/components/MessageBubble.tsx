@@ -14,6 +14,7 @@ import { code } from '@streamdown/code'
 import 'streamdown/styles.css'
 
 const streamdownPlugins = { code }
+const sandboxConfig = { url: new URL('/sandbox_proxy.html', window.location.origin) }
 
 type MessageBubbleProps = {
   message: UIMessage
@@ -397,7 +398,7 @@ function ToolInvocation({
         <div className="p-2" style={{ minHeight: 200 }}>
           <AppRenderer
             toolName={toolName}
-            sandbox={{ url: new URL('/sandbox_proxy.html', window.location.origin) }}
+            sandbox={sandboxConfig}
             html={resource.text}
             toolInput={part.input as Record<string, unknown>}
             toolResult={output as any}

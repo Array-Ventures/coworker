@@ -496,13 +496,13 @@ export async function fetchExposedMcpServers(): Promise<ExposedMcpServerInfo[]> 
     try {
       const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`)
       const toolsData = await toolsRes.json()
-      servers.push({
-        ...srv,
-        tools: Object.entries(toolsData.tools || {}).map(([name, t]: [string, any]) => ({
-          name,
-          description: t?.description,
-        })),
-      })
+      const toolsList = Array.isArray(toolsData.tools)
+        ? toolsData.tools.map((t: any) => ({ name: t.name || t.id, description: t.description }))
+        : Object.entries(toolsData.tools || {}).map(([name, t]: [string, any]) => ({
+            name,
+            description: (t as any)?.description,
+          }))
+      servers.push({ ...srv, tools: toolsList })
     } catch {
       servers.push({ ...srv, tools: [] })
     }

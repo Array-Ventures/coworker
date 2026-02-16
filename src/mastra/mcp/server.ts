@@ -4,6 +4,7 @@ import { createUIResource } from "@mcp-ui/server";
 import { z } from "zod";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { coworkerAgent } from "../agents/coworker-agent";
 
 const AGENT_ID = process.env.AGENT_ID || "coworker";
 const BASE_PATH = process.env.WORKSPACE_PATH || path.resolve("./workspaces");
@@ -57,6 +58,7 @@ export const coworkerMcpServer = new MCPServer({
   version: "1.0.0",
   description:
     "An AI team member that helps with tasks, answers questions, and manages workflows.",
+  agents: { coworkerAgent },
   tools: { view_app: viewAppTool },
   resources: {
     listResources: async () => {

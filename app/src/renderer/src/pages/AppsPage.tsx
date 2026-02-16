@@ -12,6 +12,8 @@ type AppEntry = {
   name: string
 }
 
+const sandboxConfig = { url: new URL('/sandbox_proxy.html', window.location.origin) }
+
 export default memo(function AppsPage() {
   const [apps, setApps] = useState<AppEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,7 +114,7 @@ export default memo(function AppsPage() {
               <div className="flex-1 bg-background overflow-hidden">
                 <AppRenderer
                   toolName="view_app"
-                  sandbox={{ url: new URL('/sandbox_proxy.html', window.location.origin) }}
+                  sandbox={sandboxConfig}
                   html={previewApp.html}
                   toolInput={{ name: previewApp.name }}
                   onOpenLink={async ({ url }) => { window.open(url, '_blank'); return {} }}
