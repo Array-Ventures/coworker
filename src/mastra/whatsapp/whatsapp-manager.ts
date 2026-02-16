@@ -33,7 +33,7 @@ export class WhatsAppManager {
   private reconnectAttempts = 0;
   private stopped = false;
   private connectPromise: Promise<void> | null = null;
-  private authDir = path.resolve('../../whatsapp-auth');
+  private authDir = process.env.WHATSAPP_AUTH_DIR || path.resolve('../../whatsapp-auth');
 
   // ── Lifecycle ──
 
@@ -230,8 +230,15 @@ export class WhatsAppManager {
     );
 
     if (statusCode === DisconnectReason.loggedOut) {
-      this.state = { status: 'logged_out', qrDataUrl: null, connectedPhone: null };
-      console.log('[whatsapp] logged out — user must re-scan');
+      console.log('[whatsapp] logged out — clearing credentials and showing fresh QR');
+      // Clear stale auth so next connect generates a new QR
+      if (fs.existsSync(this.authDir)) {
+        fs.rmSync(this.authDir, { recursive: true, force: true });
+      }
+      void this.setConfig('auto_connect', 'false');
+      // Immediately reconnect → Baileys sees no creds → emits QR
+      this.state = { status: 'connecting', qrDataUrl: null, connectedPhone: null };
+      void this.connect();
       return;
     }
 

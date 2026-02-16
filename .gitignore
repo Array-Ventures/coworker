@@ -10,3 +10,4 @@ workspaces/
 app/out/
 .DS_Store
 src/whatsapp-auth
+.claude/

@@ -5,20 +5,53 @@ import { PinoLogger } from '@mastra/loggers';
 import { chatRoute } from '@mastra/ai-sdk';
 import { registerApiRoute } from '@mastra/core/server';
 import { serve as inngestServe } from '@mastra/inngest';
-import { coworkerAgent, coworkerMemory, INITIAL_WORKING_MEMORY } from './agents/coworker-agent';
+import { coworkerAgent } from './agents/coworker-agent';
+import { coworkerMemory, INITIAL_WORKING_MEMORY } from './memory';
 import { inngest } from './inngest';
-import { initCustomTables } from './db';
+import { initCustomTables, DB_URL } from './db';
 import { ScheduledTaskManager } from './scheduled-tasks';
-import { agentConfig } from './agent-config';
+import { agentConfig, type McpServerConfig, type ApiKeyEntry } from './agent-config';
 import { WhatsAppManager } from './whatsapp/whatsapp-manager';
+import { coworkerMcpServer } from './mcp/server';
+import {
+  isGogInstalled,
+  listGogAccounts,
+  startGogAuth,
+  completeGogAuth,
+  removeGogAccount,
+  testGogAccount,
+} from './gog/gog-manager';
 
 const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
 
 export const mastra = new Mastra({
   agents: { coworkerAgent },
+  mcpServers: { coworkerMcpServer },
   server: {
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
+    middleware: [
+      // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
+      // MCP discovery routes (/api/mcp/v0/*, /api/mcp/*/tools*) are left open.
+      ...(['/api/a2a/*', '/api/.well-known/*', '/api/mcp/*'] as const).map((path) => ({
+        path,
+        handler: async (c: any, next: any) => {
+          // Allow MCP discovery routes through without auth
+          const url = new URL(c.req.url);
+          if (url.pathname.startsWith('/api/mcp/v0/') || url.pathname.match(/^\/api\/mcp\/[^/]+\/tools/)) {
+            return next();
+          }
+          const keys = await agentConfig.getApiKeys();
+          if (keys.length === 0) return next(); // No keys = open access
+          const auth = c.req.header('Authorization');
+          const token = auth?.replace('Bearer ', '');
+          if (!token || !keys.some((k: ApiKeyEntry) => k.key === token)) {
+            return c.json({ error: 'Unauthorized' }, 401);
+          }
+          return next();
+        },
+      })),
+    ],
     apiRoutes: [
       chatRoute({ path: '/chat/:agentId', sendReasoning: true, sendSources: true }),
       {
@@ -164,9 +197,182 @@ export const mastra = new Mastra({
           return c.json({ ok: true });
         },
       }),
+      // ── Google (gog CLI) routes ──
+      registerApiRoute('/gog/status', {
+        method: 'GET',
+        handler: async (c) => {
+          const installed = await isGogInstalled();
+          const accounts = installed ? await listGogAccounts() : [];
+          return c.json({ installed, accounts });
+        },
+      }),
+      registerApiRoute('/gog/auth/start', {
+        method: 'POST',
+        handler: async (c) => {
+          const { email, services } = await c.req.json();
+          if (!email) return c.json({ error: 'email is required' }, 400);
+          try {
+            const result = await startGogAuth(email, services);
+            return c.json(result);
+          } catch (err: any) {
+            return c.json({ error: err.message }, 500);
+          }
+        },
+      }),
+      registerApiRoute('/gog/auth/complete', {
+        method: 'POST',
+        handler: async (c) => {
+          const { email, redirectUrl, services } = await c.req.json();
+          if (!email || !redirectUrl) {
+            return c.json({ error: 'email and redirectUrl are required' }, 400);
+          }
+          const result = await completeGogAuth(email, redirectUrl, services);
+          return c.json(result);
+        },
+      }),
+      registerApiRoute('/gog/auth/test', {
+        method: 'POST',
+        handler: async (c) => {
+          const { email } = await c.req.json();
+          if (!email) return c.json({ error: 'email is required' }, 400);
+          const result = await testGogAccount(email);
+          return c.json(result);
+        },
+      }),
+      registerApiRoute('/gog/auth/remove', {
+        method: 'POST',
+        handler: async (c) => {
+          const { email } = await c.req.json();
+          if (!email) return c.json({ error: 'email is required' }, 400);
+          const result = await removeGogAccount(email);
+          return c.json(result);
+        },
+      }),
+      // ── MCP Server Config routes ──
+      registerApiRoute('/mcp-servers', {
+        method: 'GET',
+        handler: async (c) => {
+          const servers = await agentConfig.getMcpServers();
+          return c.json({ servers });
+        },
+      }),
+      registerApiRoute('/mcp-servers', {
+        method: 'PUT',
+        handler: async (c) => {
+          const body = await c.req.json();
+          if (!Array.isArray(body.servers)) {
+            return c.json({ error: 'servers must be an array' }, 400);
+          }
+          await agentConfig.setMcpServers(body.servers);
+          const servers = await agentConfig.getMcpServers();
+          return c.json({ servers });
+        },
+      }),
+      // ── MCP Registry proxy routes ──
+      registerApiRoute('/mcp-registry/servers', {
+        method: 'GET',
+        handler: async (c) => {
+          const url = new URL('https://registry.modelcontextprotocol.io/v0/servers');
+          const limit = c.req.query('limit') || '20';
+          const cursor = c.req.query('cursor');
+          const search = c.req.query('search');
+          url.searchParams.set('limit', limit);
+          url.searchParams.set('version', 'latest');
+          if (cursor) url.searchParams.set('cursor', cursor);
+          if (search) url.searchParams.set('search', search);
+          try {
+            const res = await fetch(url.toString());
+            const data = await res.json();
+            return c.json(data);
+          } catch (err: any) {
+            return c.json({ error: err.message || 'Registry fetch failed', servers: [], metadata: {} }, 502);
+          }
+        },
+      }),
+      registerApiRoute('/mcp-servers/test', {
+        method: 'POST',
+        handler: async (c) => {
+          const body = await c.req.json() as McpServerConfig;
+          try {
+            const { MCPClient } = await import('@mastra/mcp');
+            const serverDef: any = body.type === 'stdio'
+              ? { command: body.command, args: body.args || [], env: body.env || {} }
+              : {
+                  url: new URL(body.url!),
+                  ...(body.headers && Object.keys(body.headers).length > 0
+                    ? { requestInit: { headers: body.headers } }
+                    : {}),
+                };
+
+            const testClient = new MCPClient({
+              id: `test-${Date.now()}`,
+              servers: { test: serverDef },
+              timeout: 15_000,
+            });
+
+            try {
+              const tools = await testClient.listTools();
+              const toolNames = Object.keys(tools);
+              return c.json({ ok: true, tools: toolNames });
+            } finally {
+              await testClient.disconnect();
+            }
+          } catch (err: any) {
+            return c.json({ ok: false, error: err.message || 'Connection failed' });
+          }
+        },
+      }),
+      // ── API Keys & A2A Info routes ──
+      registerApiRoute('/api-keys', {
+        method: 'GET',
+        handler: async (c) => {
+          const keys = await agentConfig.getApiKeys();
+          // Truncate keys for display — only show last 4 chars
+          const safe = keys.map((k) => ({
+            ...k,
+            key: `sk-cw-${'*'.repeat(8)}...${k.key.slice(-4)}`,
+          }));
+          return c.json({ keys: safe });
+        },
+      }),
+      registerApiRoute('/api-keys', {
+        method: 'POST',
+        handler: async (c) => {
+          const { label } = await c.req.json();
+          if (!label || typeof label !== 'string') {
+            return c.json({ error: 'label is required' }, 400);
+          }
+          const entry = await agentConfig.addApiKey(label.trim());
+          // Return full key — this is the only time the client sees it
+          return c.json({ key: entry });
+        },
+      }),
+      registerApiRoute('/api-keys/:id', {
+        method: 'DELETE',
+        handler: async (c) => {
+          const id = c.req.param('id');
+          await agentConfig.deleteApiKey(id);
+          return c.json({ ok: true });
+        },
+      }),
+      registerApiRoute('/a2a-info', {
+        method: 'GET',
+        handler: async (c) => {
+          const keys = await agentConfig.getApiKeys();
+          const agentId = coworkerAgent.id;
+          return c.json({
+            agentId,
+            endpoints: {
+              a2a: `/api/a2a/${agentId}`,
+              agentCard: `/api/.well-known/${agentId}/agent-card.json`,
+            },
+            hasKeys: keys.length > 0,
+          });
+        },
+      }),
     ],
   },
-  storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:../../mastra.db' }),
+  storage: new LibSQLStore({ id: 'mastra-storage', url: DB_URL }),
   logger: new PinoLogger({
     name: 'Mastra',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -190,7 +396,7 @@ export const mastra = new Mastra({
 // Seed working memory for every resourceId that might be used to chat.
 // - 'local-user'  → Electron app
 // - 'coworker'    → Mastra Studio playground (uses agent ID)
-const SEED_RESOURCE_IDS = ['local-user', 'coworker'];
+const SEED_RESOURCE_IDS = ['coworker'];
 
 async function seedWorkingMemory() {
   const data = JSON.stringify(INITIAL_WORKING_MEMORY);

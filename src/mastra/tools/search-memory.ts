@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { coworkerMemory } from '../agents/coworker-agent';
+import { coworkerMemory } from '../memory';
 
 export const searchMemoryTool = createTool({
   id: 'search-memory',

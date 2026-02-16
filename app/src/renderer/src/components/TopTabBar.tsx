@@ -6,7 +6,7 @@ const tabs = [
   { id: 'chats', icon: 'chat_bubble', label: 'Chats' },
   { id: 'scheduled-tasks', icon: 'schedule', label: 'Autopilot' },
   { id: 'files', icon: 'folder', label: 'Files' },
-  { id: 'skills', icon: 'auto_fix_high', label: 'Skills' },
+  { id: 'superpowers', icon: 'auto_awesome', label: 'Superpowers' },
   { id: 'sites', icon: 'language', label: 'Apps' },
   { id: 'settings', icon: 'settings', label: 'Settings' },
 ]

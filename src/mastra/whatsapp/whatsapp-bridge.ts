@@ -138,7 +138,7 @@ export class WhatsAppBridge {
     }
 
     const threadId = `whatsapp-${phone}`;
-    const resourceId = `whatsapp-${phone}`;
+    const resourceId = 'coworker';
 
     try {
       // Show typing indicator

@@ -28,7 +28,7 @@ export default memo(function ChatsListPage() {
   const loadThreads = useCallback(async () => {
     setLoading(true)
     try {
-      const result = await fetchThreads(filter)
+      const result = await fetchThreads()
       const sorted = [...result].sort(
         (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
       )
@@ -38,23 +38,47 @@ export default memo(function ChatsListPage() {
     } finally {
       setLoading(false)
     }
-  }, [filter])
+  }, [])
 
   useEffect(() => {
     loadThreads()
   }, [loadThreads, refreshKey])
 
-  const filtered = useMemo(
-    () =>
-      threads.filter((t) => {
-        if (search) {
-          const title = (t.title || 'Untitled').toLowerCase()
-          if (!title.includes(search.toLowerCase())) return false
+  const filtered = useMemo(() => {
+    const channelPrefixes: Record<string, string[]> = {
+      Chat: ['app-'],
+      Scheduled: ['scheduled-'],
+      Text: ['whatsapp-'],
+      Email: ['email-'],
+      API: ['api-'],
+    }
+
+    return threads.filter((t) => {
+      // Channel filter
+      if (filter !== 'All') {
+        const prefixes = channelPrefixes[filter]
+        if (prefixes) {
+          const matchesPrefix = prefixes.some((p) => t.id.startsWith(p))
+          // For 'Chat', also include threads without a known channel prefix (e.g. Studio)
+          if (filter === 'Chat') {
+            const allKnownPrefixes = Object.values(channelPrefixes).flat()
+            const hasKnownPrefix = allKnownPrefixes.some((p) => t.id.startsWith(p))
+            if (!matchesPrefix && hasKnownPrefix) return false
+          } else if (!matchesPrefix) {
+            return false
+          }
         }
-        return true
-      }),
-    [threads, search],
-  )
+      }
+
+      // Text search
+      if (search) {
+        const title = (t.title || 'Untitled').toLowerCase()
+        if (!title.includes(search.toLowerCase())) return false
+      }
+
+      return true
+    })
+  }, [threads, filter, search])
 
   const grouped = useMemo(() => groupByDate(filtered), [filtered])
 

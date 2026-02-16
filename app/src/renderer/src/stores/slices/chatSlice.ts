@@ -11,7 +11,7 @@ import {
 import { serverMessagesToUIMessages } from '../../convert-messages'
 
 export function generateThreadId() {
-  return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  return `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 /** Shared fetch: load messages + thread metadata */

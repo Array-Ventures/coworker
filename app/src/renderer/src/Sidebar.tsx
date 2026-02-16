@@ -3,16 +3,14 @@ import { useAppStore } from './stores/useAppStore'
 
 const topNav = [
   { id: 'home', icon: 'home', label: 'Home' },
-  { id: 'start', icon: 'bolt', label: 'Start' },
   { id: 'chats', icon: 'chat_bubble', label: 'Chats' },
   { id: 'scheduled-tasks', icon: 'schedule', label: 'Autopilot' },
   { id: 'files', icon: 'folder', label: 'Files' },
-  { id: 'skills', icon: 'auto_fix_high', label: 'Skills' },
+  { id: 'superpowers', icon: 'auto_awesome', label: 'Superpowers' },
   { id: 'sites', icon: 'language', label: 'Apps' },
 ]
 
 const bottomNav = [
-  { id: 'bookmarks', icon: 'bookmark', label: 'Bookmarks' },
   { id: 'settings', icon: 'settings', label: 'Settings' },
 ]
 
@@ -54,7 +52,6 @@ export default memo(function Sidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const navigate = useAppStore((s) => s.navigate)
   const toggleSidebar = useAppStore((s) => s.toggleSidebar)
-  const setShowCommandPalette = useAppStore((s) => s.setShowCommandPalette)
 
   return (
     <aside
@@ -114,7 +111,7 @@ export default memo(function Sidebar() {
               item={item}
               active={currentPage === item.id}
               collapsed={collapsed}
-              onClick={item.id === 'start' ? () => setShowCommandPalette(true) : () => navigate(item.id)}
+              onClick={() => navigate(item.id)}
             />
           ))}
         </nav>

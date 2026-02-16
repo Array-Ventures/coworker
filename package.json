@@ -6,6 +6,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "lsof -ti :4111 | xargs kill -9 2>/dev/null || true; docker compose up -d",
     "dev": "mastra dev",
     "dev:app": "cd app && bun run dev",
     "build": "mastra build",

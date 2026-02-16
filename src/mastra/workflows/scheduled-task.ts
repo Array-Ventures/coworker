@@ -33,7 +33,7 @@ const executeStep = createStep({
             title: `[Scheduled] ${inputData.taskName}`,
             metadata: { type: 'scheduled', taskId: inputData.taskId },
           },
-          resource: 'scheduled-tasks',
+          resource: 'coworker',
         },
       },
     );

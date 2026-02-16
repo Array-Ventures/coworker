@@ -12,7 +12,7 @@ import HomePage from './pages/HomePage'
 import ChatsListPage from './pages/ChatsListPage'
 import ActiveChatPage from './pages/ActiveChatPage'
 import FilesPage from './pages/FilesPage'
-import SkillsPage from './pages/SkillsPage'
+import SuperpowersPage from './pages/SuperpowersPage'
 import SettingsPage from './pages/SettingsPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
 import SitesPage from './pages/SitesPage'
@@ -149,7 +149,7 @@ export default function App() {
           />
         )}
         {currentPage === 'files' && <FilesPage />}
-        {currentPage === 'skills' && <SkillsPage />}
+        {currentPage === 'superpowers' && <SuperpowersPage />}
         {currentPage === 'settings' && (
           <SettingsPage themeMode={theme.mode} onThemeChange={theme.setMode} />
         )}

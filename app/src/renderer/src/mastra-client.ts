@@ -16,23 +16,17 @@ export type InstalledSkillInfo = {
 const MASTRA_BASE_URL = 'http://localhost:4111'
 
 export const AGENT_ID = 'coworker'
-export const RESOURCE_ID = 'local-user'
+export const RESOURCE_ID = 'coworker'
 
 export const mastraClient = new MastraClient({
   baseUrl: MASTRA_BASE_URL,
 })
 
-export async function fetchThreads(filter?: string) {
-  const params: Record<string, any> = { agentId: AGENT_ID }
-
-  if (filter === 'Scheduled') {
-    // Scheduled task runs use a dedicated resourceId
-    params.resourceId = 'scheduled-tasks'
-  } else {
-    params.resourceId = RESOURCE_ID
-  }
-
-  const result = await mastraClient.listMemoryThreads(params)
+export async function fetchThreads() {
+  const result = await mastraClient.listMemoryThreads({
+    agentId: AGENT_ID,
+    resourceId: RESOURCE_ID,
+  })
   return result.threads
 }
 
@@ -203,6 +197,61 @@ export async function toggleScheduledTask(id: string, enabled: boolean) {
   return res.json()
 }
 
+// ── MCP Registry ──
+
+export interface McpRegistryPackage {
+  registryType: string
+  identifier: string
+  version?: string
+  transport: { type: string }
+  environmentVariables?: { name: string; description?: string; isRequired?: boolean; isSecret?: boolean; format?: string }[]
+}
+
+export interface McpRegistryRemote {
+  type: string
+  url: string
+}
+
+export interface McpRegistryServer {
+  name: string
+  description?: string
+  title?: string
+  version: string
+  repository?: { url?: string; source?: string }
+  packages?: McpRegistryPackage[]
+  remotes?: McpRegistryRemote[]
+}
+
+export interface McpRegistryItem {
+  server: McpRegistryServer
+  _meta: {
+    'io.modelcontextprotocol.registry/official': {
+      status: string
+      publishedAt: string
+      updatedAt?: string
+      isLatest: boolean
+    }
+  }
+}
+
+export interface McpRegistryResponse {
+  servers: McpRegistryItem[]
+  metadata: { nextCursor?: string; count: number }
+}
+
+export async function fetchRegistryMcps(limit = 20, cursor?: string): Promise<McpRegistryResponse> {
+  const params = new URLSearchParams({ limit: String(limit), version: 'latest' })
+  if (cursor) params.set('cursor', cursor)
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`)
+  return res.json()
+}
+
+export async function searchRegistryMcps(q: string, limit = 30): Promise<McpRegistryResponse> {
+  const params = new URLSearchParams({ search: q, limit: String(limit), version: 'latest' })
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`)
+  return res.json()
+}
+
 // ── Skills (skills.sh) ──
 
 // Browse/search response shape from built-in skills-sh proxy (not in SDK types)
@@ -257,6 +306,65 @@ export async function fetchInstalledSkills(): Promise<{
   // The actual response includes skillsShSource and path beyond the SDK type
   const res = await getWorkspace(wId).listSkills()
   return res as { skills: InstalledSkillInfo[]; isSkillsConfigured: boolean }
+}
+
+// ── Google (gog CLI) ──
+
+export interface GogAccount {
+  email: string
+  client: string
+  services: string[]
+  scopes: string[]
+  created_at: string
+  auth: string
+}
+
+export async function fetchGogStatus(): Promise<{ installed: boolean; accounts: GogAccount[] }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/status`)
+  return res.json()
+}
+
+export async function startGogAuth(
+  email: string,
+  services?: string,
+): Promise<{ authUrl: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, services }),
+  })
+  return res.json()
+}
+
+export async function completeGogAuth(
+  email: string,
+  redirectUrl: string,
+  services?: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/complete`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, redirectUrl, services }),
+  })
+  return res.json()
+}
+
+export async function testGogAccount(email: string): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  return res.json()
+}
+
+export async function removeGogAccount(email: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  return res.json()
 }
 
 // ── WhatsApp ──
@@ -325,5 +433,118 @@ export async function approveWhatsAppPairing(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   })
+  return res.json()
+}
+
+// ── MCP Servers ──
+
+export interface McpServerConfig {
+  id: string
+  name: string
+  type: 'stdio' | 'http'
+  enabled: boolean
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+}
+
+export async function fetchMcpServers(): Promise<McpServerConfig[]> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers`)
+  const data = await res.json()
+  return data.servers
+}
+
+export async function saveMcpServers(servers: McpServerConfig[]): Promise<McpServerConfig[]> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ servers }),
+  })
+  const data = await res.json()
+  return data.servers
+}
+
+export async function testMcpServer(
+  config: McpServerConfig,
+): Promise<{ ok: boolean; tools?: string[]; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
+  return res.json()
+}
+
+// ── Exposed MCP Server Info ──
+
+export interface ExposedMcpServerInfo {
+  id: string
+  name: string
+  description?: string
+  version: string
+  tools: { name: string; description?: string }[]
+}
+
+export async function fetchExposedMcpServers(): Promise<ExposedMcpServerInfo[]> {
+  const res = await fetch(`${MASTRA_BASE_URL}/api/mcp/v0/servers`)
+  const data = await res.json()
+  const servers: ExposedMcpServerInfo[] = []
+  for (const srv of data.servers || []) {
+    try {
+      const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`)
+      const toolsData = await toolsRes.json()
+      servers.push({
+        ...srv,
+        tools: Object.entries(toolsData.tools || {}).map(([name, t]: [string, any]) => ({
+          name,
+          description: t?.description,
+        })),
+      })
+    } catch {
+      servers.push({ ...srv, tools: [] })
+    }
+  }
+  return servers
+}
+
+// ── API Keys & A2A ──
+
+export interface ApiKeyEntry {
+  id: string
+  label: string
+  key: string
+  createdAt: string
+}
+
+export interface A2aInfo {
+  agentId: string
+  endpoints: { a2a: string; agentCard: string }
+  hasKeys: boolean
+}
+
+export async function fetchApiKeys(): Promise<ApiKeyEntry[]> {
+  const res = await fetch(`${MASTRA_BASE_URL}/api-keys`)
+  const data = await res.json()
+  return data.keys
+}
+
+export async function generateApiKey(label: string): Promise<ApiKeyEntry> {
+  const res = await fetch(`${MASTRA_BASE_URL}/api-keys`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  })
+  const data = await res.json()
+  return data.key
+}
+
+export async function deleteApiKey(id: string): Promise<void> {
+  await fetch(`${MASTRA_BASE_URL}/api-keys/${id}`, { method: 'DELETE' })
+}
+
+export async function fetchA2aInfo(): Promise<A2aInfo> {
+  const res = await fetch(`${MASTRA_BASE_URL}/a2a-info`)
   return res.json()
 }

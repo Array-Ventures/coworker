@@ -1,6 +1,8 @@
 import { createClient } from '@libsql/client';
 
-export const db = createClient({ url: 'file:../../mastra.db' });
+export const DB_URL = process.env.DATABASE_URL || 'file:../../mastra.db';
+
+export const db = createClient({ url: DB_URL });
 
 export async function initCustomTables() {
   await db.execute(`

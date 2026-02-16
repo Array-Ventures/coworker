@@ -1,0 +1,10 @@
+node_modules
+.mastra
+app
+workspaces
+*.db
+*.db-shm
+*.db-wal
+whatsapp-auth
+.env
+.git

@@ -1,8 +1,29 @@
 services:
+  coworker:
+    build: .
+    ports:
+      - '4111:4111'
+    env_file: .env
+    environment:
+      - DATABASE_URL=file:/data/mastra.db
+      - INNGEST_BASE_URL=http://inngest:8288
+      - INNGEST_DEV=1
+      - WORKSPACE_PATH=/workspaces
+      - WHATSAPP_AUTH_DIR=/data/whatsapp-auth
+      - GOG_HOME=/data/gog
+      - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
+    volumes:
+      - data:/data
+      - workspaces:/workspaces
+    depends_on:
+      - inngest
+
   inngest:
     image: inngest/inngest:v1.12.1
-    command: inngest dev -p 8288 -u http://host.docker.internal:4111/api/inngest --poll-interval=1
+    command: inngest dev -p 8288 -u http://coworker:4111/api/inngest --poll-interval=1
     ports:
       - '8288:8288'
-    extra_hosts:
-      - 'host.docker.internal:host-gateway'
+
+volumes:
+  data:
+  workspaces:
