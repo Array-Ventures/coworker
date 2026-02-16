@@ -1,5 +1,6 @@
 import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
+import { SemanticRecall } from "@mastra/core/processors";
 import { fastembed } from "@mastra/fastembed";
 import { z } from "zod";
 import { DB_URL } from "./db";
@@ -72,11 +73,19 @@ when something moves me I get quiet about it, not loud.`,
   },
 };
 
+// ── Shared storage & vector instances ──
+const coworkerStorage = new LibSQLStore({
+  id: "coworker-storage",
+  url: DB_URL,
+});
+
+const coworkerVector = new LibSQLVector({
+  id: "coworker-vector",
+  url: DB_URL,
+});
+
 export const coworkerMemory = new Memory({
-  storage: new LibSQLStore({
-    id: "coworker-storage",
-    url: DB_URL,
-  }),
+  storage: coworkerStorage,
   options: {
     generateTitle: true,
     semanticRecall: true,
@@ -96,8 +105,28 @@ export const coworkerMemory = new Memory({
     },
   },
   embedder: fastembed,
-  vector: new LibSQLVector({
-    id: "coworker-vector",
-    url: DB_URL,
-  }),
+  vector: coworkerVector,
 });
+
+// ── SemanticRecall processor for explicit memory search ──
+// Uses the same code path as the built-in input/output processors,
+// ensuring consistent vector index naming (avoids recall() dimension bug).
+let _semanticRecall: SemanticRecall | null = null;
+
+export async function getSemanticRecall(): Promise<SemanticRecall> {
+  if (_semanticRecall) return _semanticRecall;
+
+  const memoryStore = await coworkerStorage.getStore("memory");
+  if (!memoryStore) throw new Error("Memory storage domain not available");
+
+  _semanticRecall = new SemanticRecall({
+    storage: memoryStore,
+    vector: coworkerVector,
+    embedder: fastembed,
+    topK: 10,
+    messageRange: 1,
+    scope: "resource",
+  });
+
+  return _semanticRecall;
+}

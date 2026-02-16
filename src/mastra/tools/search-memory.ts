@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { coworkerMemory } from '../memory';
+import { getSemanticRecall } from '../memory';
 
 export const searchMemoryTool = createTool({
   id: 'search-memory',
@@ -17,31 +17,31 @@ export const searchMemoryTool = createTool({
       return { results: [], message: 'No resource context available' };
     }
 
-    const { messages } = await coworkerMemory.recall({
-      threadId: threadId || '__search__',
-      resourceId,
-      vectorSearchString: query,
-      threadConfig: {
-        semanticRecall: {
-          topK: 5,
-          messageRange: 1,
-          scope: 'resource',
-        },
-        lastMessages: false,
-      },
-    });
+    try {
+      const semanticRecall = await getSemanticRecall();
 
-    if (!messages.length) {
-      return { results: [], message: 'No relevant memories found.' };
+      // Use the same performSemanticSearch that the built-in processors use.
+      // This ensures consistent vector index naming (no dimension mismatch).
+      const messages = await (semanticRecall as any).performSemanticSearch({
+        query,
+        threadId: threadId || '__search__',
+        resourceId,
+      });
+
+      if (!messages || messages.length === 0) {
+        return { results: [], message: 'No relevant memories found.' };
+      }
+
+      const results = messages.map((m: any) => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+        createdAt: m.createdAt,
+        threadId: m.threadId,
+      }));
+
+      return { results, count: results.length };
+    } catch (err: any) {
+      return { results: [], message: `Memory search failed: ${err.message}` };
     }
-
-    const results = messages.map((m: any) => ({
-      role: m.role,
-      content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      createdAt: m.createdAt,
-      threadId: m.threadId,
-    }));
-
-    return { results, count: results.length };
   },
 });
