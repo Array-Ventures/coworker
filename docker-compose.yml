@@ -1,6 +1,7 @@
 services:
   coworker:
     image: ghcr.io/array-ventures/coworker:latest
+    pull_policy: always
     ports:
       - '127.0.0.1:4111:4111'
     environment:
