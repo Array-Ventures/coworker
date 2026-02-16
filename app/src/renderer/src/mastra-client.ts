@@ -13,7 +13,8 @@ export type InstalledSkillInfo = {
   skillsShSource?: { owner: string; repo: string }
 }
 
-const MASTRA_BASE_URL = 'http://localhost:4111'
+export const MASTRA_BASE_URL =
+  (import.meta as any).env?.VITE_MASTRA_BASE_URL || 'http://localhost:4111'
 
 export const AGENT_ID = 'coworker'
 export const RESOURCE_ID = 'coworker'

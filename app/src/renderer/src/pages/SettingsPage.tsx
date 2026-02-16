@@ -669,7 +669,7 @@ function EmailSection() {
 
 /* ── A2A / API Access ── */
 
-const MASTRA_BASE_URL = 'http://localhost:4111'
+import { MASTRA_BASE_URL } from '../mastra-client'
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)

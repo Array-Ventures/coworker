@@ -11,6 +11,14 @@ services:
       - WHATSAPP_AUTH_DIR=/data/whatsapp-auth
       - GOG_HOME=/data/gog
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
+      - MODEL=${MODEL:-}
+      - AGENT_ID=${AGENT_ID:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - NVIDIA_API_KEY=${NVIDIA_API_KEY:-}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
     volumes:
       - data:/data
       - workspaces:/workspaces
