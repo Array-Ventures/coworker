@@ -12,7 +12,7 @@ RUN bun install --frozen-lockfile
 
 COPY src ./src
 COPY tsconfig.json ./
-RUN npx mastra build && \
+RUN npx mastra build --studio && \
     cd .mastra/output && bun pm trust --all 2>/dev/null; bun install || true
 
 # ── Production (Debian for glibc native module compatibility) ──
@@ -46,6 +46,7 @@ USER mastra
 
 ENV NODE_ENV=production
 ENV PORT=4111
+ENV MASTRA_STUDIO_PATH=./studio
 
 EXPOSE 4111
 
