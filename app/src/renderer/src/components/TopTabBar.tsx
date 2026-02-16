@@ -7,7 +7,7 @@ const tabs = [
   { id: 'scheduled-tasks', icon: 'schedule', label: 'Autopilot' },
   { id: 'files', icon: 'folder', label: 'Files' },
   { id: 'superpowers', icon: 'auto_awesome', label: 'Superpowers' },
-  { id: 'sites', icon: 'language', label: 'Apps' },
+  { id: 'apps', icon: 'apps', label: 'Apps' },
   { id: 'settings', icon: 'settings', label: 'Settings' },
 ]
 

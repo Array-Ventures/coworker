@@ -24,6 +24,7 @@
     "@jvmr/pptx-to-html": "^1.0.0",
     "@mastra/client-js": "^1.4.0",
     "@mastra/inngest": "^1.1.0",
+    "@mcp-ui/client": "^6.1.0",
     "@streamdown/code": "^1.0.2",
     "@tailwindcss/vite": "^4.1.18",
     "@uiw/react-codemirror": "^4.25.4",

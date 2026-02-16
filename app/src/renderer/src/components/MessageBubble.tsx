@@ -8,6 +8,7 @@ import type {
 } from 'ai'
 import { isToolUIPart, getToolName } from 'ai'
 import { getToolDisplay, getPrimaryArgValue, getExecutionTime, formatToolOutput } from '../lib/tool-display'
+import { AppRenderer } from '@mcp-ui/client'
 import { Streamdown } from 'streamdown'
 import { code } from '@streamdown/code'
 import 'streamdown/styles.css'
@@ -373,6 +374,40 @@ function ToolInvocation({
   // Output available — collapsible
   const duration = getExecutionTime(part.output)
   const formatted = expanded ? formatToolOutput(toolName, part.output) : null
+
+  // Detect MCP UI resource in tool output
+  const output = part.output as Record<string, unknown> | undefined
+  const isUiResource =
+    output?.type === 'resource' &&
+    typeof (output?.resource as any)?.uri === 'string' &&
+    (output?.resource as any)?.uri?.startsWith('ui://')
+
+  if (isUiResource) {
+    const resource = output!.resource as { uri: string; text: string }
+    return (
+      <div className="bg-card border border-border rounded-lg mt-2 overflow-hidden">
+        <ToolHeader
+          toolName={toolName}
+          args={part.input}
+          statusIcon="check_circle"
+          statusIconClass="text-success"
+          duration={duration}
+        />
+        <div className="h-px w-full bg-border" />
+        <div className="p-2" style={{ minHeight: 200 }}>
+          <AppRenderer
+            toolName={toolName}
+            sandbox={{ url: new URL('/sandbox_proxy.html', window.location.origin) }}
+            html={resource.text}
+            toolInput={part.input as Record<string, unknown>}
+            toolResult={output as any}
+            onOpenLink={async ({ url }) => { window.open(url, '_blank'); return {}; }}
+            onError={(err) => console.error('AppRenderer error:', err)}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="bg-card border border-border rounded-lg mt-2 overflow-hidden">

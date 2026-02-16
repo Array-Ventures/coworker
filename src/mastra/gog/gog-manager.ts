@@ -164,8 +164,8 @@ export async function completeGogAuth(
       output += chunk.toString();
     };
 
-    child.stdout.on('data', collectOutput);
-    child.stderr.on('data', collectOutput);
+    child.stdout?.on('data', collectOutput);
+    child.stderr?.on('data', collectOutput);
 
     child.on('close', (code) => {
       pendingAuthProcess = null;
@@ -178,8 +178,8 @@ export async function completeGogAuth(
     });
 
     // Send the redirect URL to the waiting process
-    child.stdin.write(redirectUrl + '\n');
-    child.stdin.end();
+    child.stdin?.write(redirectUrl + '\n');
+    child.stdin?.end();
 
     // Timeout after 30 seconds
     setTimeout(() => {

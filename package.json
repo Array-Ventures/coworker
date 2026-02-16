@@ -27,6 +27,8 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
+    "@mcp-ui/server": "^6.1.0",
+    "@modelcontextprotocol/ext-apps": "^1.0.1",
     "@types/dompurify": "^3.2.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "dompurify": "^3.3.1",

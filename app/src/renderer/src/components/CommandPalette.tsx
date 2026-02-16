@@ -12,7 +12,7 @@ type Command = {
 const commands: Command[] = [
   { id: 'new-chat', icon: 'chat_bubble', label: 'New Chat', shortcut: '⌘ N', action: 'new-chat' },
   { id: 'create-note', icon: 'description', label: 'Create note', shortcut: '⌘ ⇧ N', action: 'files' },
-  { id: 'create-site', icon: 'language', label: 'Create site', shortcut: '⌘ ⇧ S', action: 'sites' },
+  { id: 'create-app', icon: 'apps', label: 'Create app', shortcut: '⌘ ⇧ S', action: 'apps' },
   { id: 'upload-file', icon: 'upload_file', label: 'Upload file', shortcut: '⌘ U', action: 'files' },
   { id: 'upload-folder', icon: 'create_new_folder', label: 'Upload folder', action: 'files' },
   { id: 'create-skill', icon: 'auto_fix_high', label: 'Create Agent Skill', action: 'skills' },

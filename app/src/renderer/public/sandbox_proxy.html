@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MCP UI Sandbox Proxy</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    iframe { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body>
+<script>
+(function() {
+  var nestedIframe = null;
+
+  window.addEventListener('message', function(event) {
+    var data = event.data;
+    if (!data || typeof data !== 'object') return;
+
+    // Host sends JSON-RPC notification with HTML to render
+    if (data.method === 'ui/notifications/sandbox-resource-ready' && data.params && data.params.html) {
+      // Remove existing iframe if any
+      if (nestedIframe && nestedIframe.parentNode) {
+        nestedIframe.parentNode.removeChild(nestedIframe);
+      }
+
+      // Create nested iframe with srcdoc
+      nestedIframe = document.createElement('iframe');
+      nestedIframe.sandbox = 'allow-scripts allow-forms';
+      nestedIframe.style.cssText = 'width:100%;height:100%;border:none;';
+      nestedIframe.srcdoc = data.params.html;
+      document.body.appendChild(nestedIframe);
+      return;
+    }
+
+    // Forward all other JSON-RPC messages from host to nested iframe
+    if (nestedIframe && nestedIframe.contentWindow && event.source === window.parent) {
+      nestedIframe.contentWindow.postMessage(data, '*');
+    }
+  });
+
+  // Forward messages from nested iframe back to host
+  window.addEventListener('message', function(event) {
+    if (nestedIframe && event.source === nestedIframe.contentWindow) {
+      window.parent.postMessage(event.data, '*');
+    }
+  });
+
+  // Signal to host that proxy is ready (JSON-RPC notification format)
+  window.parent.postMessage({
+    jsonrpc: '2.0',
+    method: 'ui/notifications/sandbox-proxy-ready',
+    params: {}
+  }, '*');
+})();
+</script>
+</body>
+</html>

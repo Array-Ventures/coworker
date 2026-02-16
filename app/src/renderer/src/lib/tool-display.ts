@@ -13,6 +13,7 @@ const WORKSPACE_TOOLS: Record<string, ToolMeta> = {
   mastra_workspace_delete: { displayName: 'Delete', icon: 'delete', primaryArg: 'path' },
   mastra_workspace_mkdir: { displayName: 'Make Directory', icon: 'create_new_folder', primaryArg: 'path' },
   mastra_workspace_file_stat: { displayName: 'File Info', icon: 'info', primaryArg: 'path' },
+  view_app: { displayName: 'View App', icon: 'web', primaryArg: 'name' },
 }
 
 export function getToolDisplay(toolName: string): ToolMeta {

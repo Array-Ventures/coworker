@@ -5,7 +5,7 @@ import { DefaultChatTransport } from 'ai'
 import { useTheme } from './hooks/useTheme'
 import { useAppStore } from './stores/useAppStore'
 import { generateThreadId } from './stores/slices/chatSlice'
-import { AGENT_ID, RESOURCE_ID } from './mastra-client'
+import { AGENT_ID, RESOURCE_ID, MASTRA_BASE_URL } from './mastra-client'
 import Sidebar from './Sidebar'
 import CommandPalette from './components/CommandPalette'
 import HomePage from './pages/HomePage'
@@ -15,7 +15,7 @@ import FilesPage from './pages/FilesPage'
 import SuperpowersPage from './pages/SuperpowersPage'
 import SettingsPage from './pages/SettingsPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
-import SitesPage from './pages/SitesPage'
+import AppsPage from './pages/AppsPage'
 
 export default function App() {
   const theme = useTheme()
@@ -32,7 +32,7 @@ export default function App() {
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
-        api: `http://localhost:4111/chat/${AGENT_ID}`,
+        api: `${MASTRA_BASE_URL}/chat/${AGENT_ID}`,
         prepareSendMessagesRequest({ messages }) {
           const state = useAppStore.getState()
           return {
@@ -154,7 +154,7 @@ export default function App() {
           <SettingsPage themeMode={theme.mode} onThemeChange={theme.setMode} />
         )}
         {currentPage === 'scheduled-tasks' && <ScheduledTasksPage />}
-        {currentPage === 'sites' && <SitesPage />}
+        {currentPage === 'apps' && <AppsPage />}
       </div>
 
 {showCommandPalette && <CommandPalette />}
