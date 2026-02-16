@@ -2,7 +2,7 @@ services:
   coworker:
     image: ghcr.io/array-ventures/coworker:latest
     ports:
-      - '4111:4111'
+      - '127.0.0.1:4111:4111'
     environment:
       - DATABASE_URL=file:/data/mastra.db
       - INNGEST_BASE_URL=http://inngest:8288
@@ -29,7 +29,7 @@ services:
     image: inngest/inngest:v1.12.1
     command: inngest dev -p 8288 -u http://coworker:4111/api/inngest --poll-interval=1
     ports:
-      - '8288:8288'
+      - '127.0.0.1:8288:8288'
 
 volumes:
   data:
