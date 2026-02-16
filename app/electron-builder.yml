@@ -1,0 +1,22 @@
+appId: com.coworker.app
+productName: Coworker
+directories:
+  buildResources: build
+files:
+  - '!**/.vite/**'
+  - '!src/**'
+  - '!electron.vite.config.*'
+  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+mac:
+  target:
+    - dmg
+    - zip
+  artifactName: ${name}-${version}-${arch}.${ext}
+win:
+  target:
+    - nsis
+linux:
+  target:
+    - AppImage
+    - deb

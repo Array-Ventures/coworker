@@ -1,0 +1,53 @@
+{
+  "name": "coworker-app",
+  "version": "0.1.0",
+  "description": "Coworker desktop app",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "dependencies": {
+    "@ai-sdk/react": "^3.0.88",
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.11",
+    "@codemirror/lang-javascript": "^6.2.4",
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lang-markdown": "^6.5.0",
+    "@codemirror/lang-python": "^6.2.1",
+    "@electron-toolkit/preload": "^3.0.2",
+    "@electron-toolkit/utils": "^4.0.0",
+    "@inngest/realtime": "^0.4.6",
+    "@jvmr/pptx-to-html": "^1.0.0",
+    "@mastra/client-js": "^1.4.0",
+    "@mastra/inngest": "^1.1.0",
+    "@streamdown/code": "^1.0.2",
+    "@tailwindcss/vite": "^4.1.18",
+    "@uiw/react-codemirror": "^4.25.4",
+    "ai": "^6.0.86",
+    "inngest": "^3.52.0",
+    "mammoth": "^1.11.0",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^10.3.0",
+    "react-zoom-pan-pinch": "^3.7.0",
+    "remark-gfm": "^4.0.1",
+    "streamdown": "^2.2.0",
+    "tailwindcss": "^4.1.18",
+    "xlsx": "^0.18.5",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.4",
+    "electron": "^40.4.1",
+    "electron-builder": "^26.7.0",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "typescript": "^5.9.3"
+  }
+}
