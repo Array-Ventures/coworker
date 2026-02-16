@@ -1,9 +1,9 @@
 services:
   coworker:
+    image: ghcr.io/array-ventures/coworker:latest
     build: .
     ports:
       - '4111:4111'
-    env_file: .env
     environment:
       - DATABASE_URL=file:/data/mastra.db
       - INNGEST_BASE_URL=http://inngest:8288
