@@ -1,0 +1,52 @@
+name: Release macOS DMG
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. 0.1.0)'
+        required: false
+        default: ''
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install app dependencies
+        working-directory: app
+        run: bun install --frozen-lockfile
+
+      - name: Build Electron app
+        working-directory: app
+        run: bun run build
+
+      - name: Package macOS DMG
+        working-directory: app
+        run: bun run dist --mac --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coworker-macos-dmg
+          path: app/dist/*.dmg
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: inputs.version != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          name: Coworker v${{ inputs.version }}
+          files: |
+            app/dist/*.dmg
+            app/dist/*.zip
+          draft: true
