@@ -5,6 +5,12 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "author": "Array Ventures",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Array-Ventures/coworker.git"
+  },
   "scripts": {
     "predev": "lsof -ti :4111 | xargs kill -9 2>/dev/null || true; docker compose up -d",
     "dev": "mastra dev",

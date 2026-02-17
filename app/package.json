@@ -2,6 +2,12 @@
   "name": "coworker-app",
   "version": "0.1.0",
   "description": "Coworker desktop app",
+  "author": "Array Ventures",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Array-Ventures/coworker.git"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",

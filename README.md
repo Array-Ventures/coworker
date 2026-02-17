@@ -12,17 +12,21 @@ AI team member built with [Mastra](https://mastra.ai). Handles tasks, answers qu
 
 ## Setup
 
+### Backend
+
 ```bash
 cp .env.example .env   # add your API keys
 bun install
 bun run dev            # http://localhost:4111
 ```
 
-Desktop app:
+### Desktop App
 
 ```bash
 cd app && bun install && bun run dev
 ```
+
+The app connects to `http://localhost:4111` by default. To connect to a remote Mastra server, go to **Settings > Advanced** and update the Server URL.
 
 ## Docker
 
@@ -31,6 +35,12 @@ docker compose up
 ```
 
 Builds are automated via GitHub Actions and pushed to `ghcr.io`.
+
+## Auto-Updates
+
+The desktop app supports automatic updates via GitHub Releases. When a new release is published, users are notified in **Settings > Advanced** where they can download and install the update.
+
+Releases are built via the GitHub Actions workflow — push a version tag or trigger the workflow manually.
 
 ## Project Structure
 
