@@ -36,7 +36,7 @@ jobs:
       - name: Package & publish release
         if: inputs.version != ''
         working-directory: app
-        run: bun run dist --mac --publish always
+        run: bun run dist --mac --publish always -c.publish.releaseType=release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
