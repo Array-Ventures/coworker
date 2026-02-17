@@ -17,6 +17,9 @@ mac:
     - dmg
     - zip
   artifactName: ${name}-${version}-${arch}.${ext}
+  sign: true
+  notarize: true
+  identity: "Developer ID Application: Parth Modi (ZX45R8X47A)"
 win:
   target:
     - nsis
