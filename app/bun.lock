@@ -16,6 +16,7 @@
         "@electron-toolkit/utils": "^4.0.0",
         "@inngest/realtime": "^0.4.6",
         "@jvmr/pptx-to-html": "^1.0.0",
+        "@mastra/ai-sdk": "^1.0.4",
         "@mastra/client-js": "^1.4.0",
         "@mastra/inngest": "^1.1.0",
         "@mcp-ui/client": "^6.1.0",
@@ -278,6 +279,8 @@
     "@malept/flatpak-bundler": ["@malept/flatpak-bundler@0.4.0", "", { "dependencies": { "debug": "^4.1.1", "fs-extra": "^9.0.0", "lodash": "^4.17.15", "tmp-promise": "^3.0.2" } }, "sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q=="],
 
     "@marijn/find-cluster-break": ["@marijn/find-cluster-break@1.0.2", "", {}, "sha512-l0h88YhZFyKdXIFNfSWpyjStDjGHwZ/U7iobcK1cQQD8sejsONdQtTVU+1wVN1PBw40PiiHB1vA5S7VTfQiP9g=="],
+
+    "@mastra/ai-sdk": ["@mastra/ai-sdk@1.0.4", "", { "peerDependencies": { "@mastra/core": ">=1.0.0-0 <2.0.0-0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-3ARlTje6Vpef1wkXMAsKCnI4kVGNq9b7z3yT3tMteY/z5nV7XDhnW2m61mlzFlcJ4+NK9/fTu5ENvWnM//uxag=="],
 
     "@mastra/client-js": ["@mastra/client-js@1.4.0", "", { "dependencies": { "@lukeed/uuid": "^2.0.1", "@mastra/core": "1.4.0", "@mastra/schema-compat": "1.1.0", "json-schema": "^0.4.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" } }, "sha512-nCRO//j7qy7ZQwbdFdFgDce493caX0o9makNIvMuSjCBRJwdxj2k1YP10nR24OsG7sLvnoZLKYxgu5zt5n4vFw=="],
 

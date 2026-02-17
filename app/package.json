@@ -28,6 +28,7 @@
     "@electron-toolkit/utils": "^4.0.0",
     "@inngest/realtime": "^0.4.6",
     "@jvmr/pptx-to-html": "^1.0.0",
+    "@mastra/ai-sdk": "^1.0.4",
     "@mastra/client-js": "^1.4.0",
     "@mastra/inngest": "^1.1.0",
     "@mcp-ui/client": "^6.1.0",
