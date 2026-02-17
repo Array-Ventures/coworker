@@ -1,9 +1,18 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
+import log from 'electron-log'
+
+// Configure auto-updater logging
+autoUpdater.logger = log
+autoUpdater.autoDownload = false
+autoUpdater.autoInstallOnAppQuit = true
+
+let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -40,6 +49,40 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+
+  // ── Auto-updater ──
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-status', { status: 'available', version: info.version })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update-status', { status: 'not-available' })
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    mainWindow?.webContents.send('update-status', {
+      status: 'downloading',
+      percent: progress.percent,
+    })
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    mainWindow?.webContents.send('update-status', { status: 'downloaded', version: info.version })
+  })
+
+  autoUpdater.on('error', (error) => {
+    log.error('Auto-updater error:', error)
+    mainWindow?.webContents.send('update-status', { status: 'error', message: error.message })
+  })
+
+  ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates())
+  ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
+  ipcMain.handle('install-update', () => autoUpdater.quitAndInstall(false, true))
+
+  // Check for updates 3s after launch (skip in dev)
+  if (!is.dev) {
+    setTimeout(() => autoUpdater.checkForUpdates(), 3000)
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

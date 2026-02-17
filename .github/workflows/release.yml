@@ -19,6 +19,12 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - name: Set version in package.json
+        if: inputs.version != ''
+        working-directory: app
+        run: |
+          bun -e "const pkg = await Bun.file('package.json').json(); pkg.version = '${{ inputs.version }}'; await Bun.write('package.json', JSON.stringify(pkg, null, 2) + '\n')"
+
       - name: Install app dependencies
         working-directory: app
         run: bun install --frozen-lockfile
@@ -27,7 +33,15 @@ jobs:
         working-directory: app
         run: bun run build
 
-      - name: Package macOS DMG
+      - name: Package & publish release
+        if: inputs.version != ''
+        working-directory: app
+        run: bun run dist --mac --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Package only (no release)
+        if: inputs.version == ''
         working-directory: app
         run: bun run dist --mac --publish never
         env:
@@ -39,14 +53,3 @@ jobs:
           name: coworker-macos-dmg
           path: app/dist/*.dmg
           retention-days: 30
-
-      - name: Create GitHub Release
-        if: inputs.version != ''
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ inputs.version }}
-          name: Coworker v${{ inputs.version }}
-          files: |
-            app/dist/*.dmg
-            app/dist/*.zip
-          draft: true

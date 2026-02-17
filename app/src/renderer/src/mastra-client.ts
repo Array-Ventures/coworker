@@ -1,9 +1,11 @@
 import { MastraClient } from '@mastra/client-js'
 import type { StorageThreadType } from '@mastra/core/memory'
 import type { ListSkillsResponse } from '@mastra/client-js'
+import type { ObservationalMemoryRecord } from '@mastra/core/storage'
 
 export type { StorageThreadType } from '@mastra/core/memory'
 export type { SkillMetadata, ListSkillsResponse } from '@mastra/client-js'
+export type { ObservationalMemoryRecord } from '@mastra/core/storage'
 
 // Extended type — the actual list-skills response includes fields not in the SDK type
 export type InstalledSkillInfo = {
@@ -132,6 +134,56 @@ export async function updateAgentConfig(body: {
     body: JSON.stringify(body),
   })
   return res.json()
+}
+
+// ── Working Memory ──
+
+export type WorkingMemory = {
+  persona?: {
+    soul?: string
+    expression?: string
+    interests?: string
+    learnedBehaviors?: string
+  }
+  org?: {
+    overview?: string
+    team?: string
+    stack?: string
+    projects?: string
+    preferences?: string
+  }
+}
+
+export async function fetchWorkingMemory(): Promise<WorkingMemory> {
+  const raw = await mastraClient.getWorkingMemory({
+    agentId: AGENT_ID,
+    threadId: '__seed__',
+    resourceId: RESOURCE_ID,
+  })
+  if (!raw) return {}
+  // SDK returns { source, threadExists, workingMemory, workingMemoryTemplate }
+  const wmString = (raw as any).workingMemory
+  if (!wmString) return {}
+  return typeof wmString === 'string' ? JSON.parse(wmString) : wmString
+}
+
+export async function saveWorkingMemory(wm: WorkingMemory): Promise<void> {
+  await mastraClient.updateWorkingMemory({
+    agentId: AGENT_ID,
+    threadId: '__seed__',
+    resourceId: RESOURCE_ID,
+    workingMemory: JSON.stringify(wm),
+  })
+}
+
+// ── Observational Memory ──
+
+export async function fetchObservationalMemory(): Promise<ObservationalMemoryRecord | null> {
+  const raw = await mastraClient.getObservationalMemory({
+    agentId: AGENT_ID,
+    resourceId: RESOURCE_ID,
+  })
+  return (raw as any)?.record ?? null
 }
 
 // ── Scheduled Tasks ──

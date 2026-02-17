@@ -3,9 +3,10 @@ import type { ThemeMode } from '../hooks/useTheme'
 import { useAppStore } from '../stores/useAppStore'
 import PageShell from '../components/PageShell'
 import FilterTabs from '../components/FilterTabs'
-import { fetchAgentConfig, updateAgentConfig, fetchAIProviders, fetchExposedMcpServers } from '../mastra-client'
-import type { McpServerConfig, ApiKeyEntry, ExposedMcpServerInfo } from '../mastra-client'
-import type { Provider } from '@mastra/client-js'
+import { fetchExposedMcpServers } from '../mastra-client'
+import type { McpServerConfig, ApiKeyEntry, ExposedMcpServerInfo, WorkingMemory, ObservationalMemoryRecord } from '../mastra-client'
+
+import type { AgentConfigState, Provider } from '../stores/slices/brainSlice'
 
 const settingsTabs = ['AI', 'UX', 'Channels', 'Integrations', 'Developer', 'Advanced']
 
@@ -14,6 +15,563 @@ const themeModes: { value: ThemeMode; label: string; icon: string }[] = [
   { value: 'light', label: 'Light', icon: 'light_mode' },
   { value: 'dark', label: 'Dark', icon: 'dark_mode' },
 ]
+
+/* ── Brain Designer (AI tab) ── */
+
+const BRAIN_REGIONS = [
+  { section: 'persona' as const, field: 'soul', title: 'Soul', icon: 'favorite', color: '#F43F5E', sub: 'Core identity and values' },
+  { section: 'persona' as const, field: 'expression', title: 'Voice', icon: 'record_voice_over', color: '#A855F7', sub: 'How they express themselves' },
+  { section: 'persona' as const, field: 'interests', title: 'Interests', icon: 'lightbulb', color: '#F59E0B', sub: 'What genuinely fascinates them' },
+  { section: 'persona' as const, field: 'learnedBehaviors', title: 'Learned Behaviors', icon: 'psychology', color: '#14B8A6', sub: 'Patterns picked up over time' },
+  { section: 'org' as const, field: 'overview', title: 'Overview', icon: 'domain', color: '#3B82F6', sub: 'Company, industry, and mission' },
+  { section: 'org' as const, field: 'team', title: 'Team', icon: 'group', color: '#22C55E', sub: "Who's who and how they work" },
+  { section: 'org' as const, field: 'stack', title: 'Tech Stack', icon: 'code', color: '#F97316', sub: 'Languages, frameworks, and tools' },
+  { section: 'org' as const, field: 'projects', title: 'Projects', icon: 'rocket_launch', color: '#6366F1', sub: "What's being built and priorities" },
+  { section: 'org' as const, field: 'preferences', title: 'Preferences', icon: 'tune', color: '#64748B', sub: 'Code review, PRs, and conventions' },
+] as const
+
+const SEED_PREFIXES = [
+  'Nothing here yet',
+  "Haven't met",
+  "Don't know",
+  'No active projects',
+  "I don't know this organization",
+  "Haven't learned",
+  'My name is Coworker',
+  'I write the way things arrive',
+]
+
+function isRegionActive(content?: string): boolean {
+  if (!content?.trim()) return false
+  return !SEED_PREFIXES.some((prefix) => content.startsWith(prefix))
+}
+
+function getFieldValue(wm: WorkingMemory, section: 'persona' | 'org', field: string): string | undefined {
+  const sec = wm[section]
+  if (!sec) return undefined
+  return (sec as Record<string, string | undefined>)[field]
+}
+
+/* ── Observation parser ── */
+
+interface ParsedObservation {
+  emoji: string
+  time: string
+  text: string
+  threadId: string
+}
+
+const EMOJI_COLOR_MAP: Record<string, { border: string; time: string }> = {
+  '\u{1F534}': { border: '#EF4444', time: '#DC2626' },
+  '\u{1F7E1}': { border: '#F59E0B', time: '#D97706' },
+  '\u{1F7E2}': { border: '#22C55E', time: '#16A34A' },
+}
+
+function parseObservations(raw: string): ParsedObservation[] {
+  const results: ParsedObservation[] = []
+  const threadRegex = /<thread\s+id="([^"]*)">([\s\S]*?)<\/thread>/g
+  let threadMatch: RegExpExecArray | null
+  while ((threadMatch = threadRegex.exec(raw)) !== null) {
+    const threadId = threadMatch[1]
+    const body = threadMatch[2]
+    const lineRegex = /^\*\s+([\u{1F534}\u{1F7E1}\u{1F7E2}])\s+\((\d{2}:\d{2})\)\s+(.+)$/gmu
+    let lineMatch: RegExpExecArray | null
+    while ((lineMatch = lineRegex.exec(body)) !== null) {
+      results.push({ emoji: lineMatch[1], time: lineMatch[2], text: lineMatch[3], threadId })
+    }
+  }
+  return results.reverse()
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+function timeAgo(date: Date | string | null | undefined): string {
+  if (!date) return 'never'
+  const ms = Date.now() - new Date(date).getTime()
+  const mins = Math.floor(ms / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+/* ── Subconscious View ── */
+
+function CapacityRing({ percentage }: { percentage: number }) {
+  const r = 42
+  const circumference = 2 * Math.PI * r
+  const offset = circumference - (Math.min(percentage, 100) / 100) * circumference
+  return (
+    <div className="relative" style={{ width: 96, height: 96 }}>
+      <svg width={96} height={96} viewBox="0 0 96 96" className="rotate-[-90deg]">
+        <circle cx={48} cy={48} r={r} fill="none" stroke="#EDE9FE" strokeWidth={6} />
+        <circle
+          cx={48} cy={48} r={r} fill="none"
+          stroke="#8B5CF6" strokeWidth={6}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+        <span className="font-mono text-[20px] font-bold" style={{ color: '#7C3AED' }}>{Math.round(percentage)}%</span>
+        <span className="font-secondary text-[8px] font-semibold" style={{ color: '#A78BFA', letterSpacing: 1.5 }}>CAPACITY</span>
+      </div>
+    </div>
+  )
+}
+
+function SubconsciousView({ data }: { data: ObservationalMemoryRecord | null }) {
+  if (!data) {
+    return (
+      <div className="max-w-[680px] mx-auto flex flex-col items-center justify-center py-20 gap-3">
+        <span className="material-icon text-muted-dim" style={{ fontSize: 40 }}>psychology</span>
+        <p className="font-secondary text-[13px] text-muted text-center m-0">
+          No observations yet — conversations will build the subconscious over time.
+        </p>
+      </div>
+    )
+  }
+
+  const maxTokens = (data as any).config?.maxObservationTokens ?? 8000
+  const percentage = (data.observationTokenCount / maxTokens) * 100
+  const observations = parseObservations(data.activeObservations || '')
+
+  const status = data.isReflecting ? 'Reflecting' : data.isObserving ? 'Observing' : 'Idle'
+  const statusColor = data.isReflecting ? '#A855F7' : data.isObserving ? '#22C55E' : '#6B7280'
+
+  const dateStr = data.lastObservedAt
+    ? new Date(data.lastObservedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'No observations yet'
+
+  return (
+    <div className="max-w-[680px] mx-auto flex flex-col gap-6">
+      {/* Memory Status hero card */}
+      <div
+        className="flex items-center gap-8 rounded-2xl"
+        style={{ background: '#F9F7FF', border: '1px solid #EDE9FE', padding: '28px 32px' }}
+      >
+        <CapacityRing percentage={percentage} />
+        <div className="flex-1 flex flex-col gap-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-icon" style={{ fontSize: 16, color: '#8B5CF6' }}>visibility</span>
+              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Observations</span>
+            </div>
+            <span className="font-mono text-[12px] font-semibold text-foreground">{formatTokens(data.observationTokenCount)} tokens</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-icon" style={{ fontSize: 16, color: '#F59E0B' }}>schedule</span>
+              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Pending messages</span>
+            </div>
+            <span className="font-mono text-[12px] font-semibold text-foreground">{formatTokens(data.pendingMessageTokens)} tokens</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-icon" style={{ fontSize: 16, color: '#14B8A6' }}>autorenew</span>
+              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Reflections</span>
+            </div>
+            <span className="font-mono text-[12px] font-semibold text-foreground">{data.generationCount} cycles</span>
+          </div>
+          <div className="w-full h-px" style={{ backgroundColor: '#EDE9FE' }} />
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor }} />
+            <span className="font-secondary text-[11px] font-medium" style={{ color: '#6B7280' }}>
+              {status} — last processed {timeAgo(data.lastObservedAt)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Thought Stream header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="material-icon" style={{ fontSize: 16, color: '#8B5CF6' }}>psychology</span>
+          <span className="font-secondary text-[11px] font-bold uppercase" style={{ color: '#6B7280', letterSpacing: 1.2 }}>Thought Stream</span>
+        </div>
+        <span className="font-secondary text-[11px] font-medium" style={{ color: '#A1A1AA' }}>{dateStr}</span>
+      </div>
+
+      {/* Observation cards */}
+      {observations.length > 0 ? (
+        <div className="flex flex-col gap-2.5">
+          {observations.map((obs, i) => {
+            const colors = EMOJI_COLOR_MAP[obs.emoji] || { border: '#6B7280', time: '#6B7280' }
+            return (
+              <div
+                key={i}
+                className="bg-card rounded-[10px] flex flex-col gap-1.5"
+                style={{ padding: '12px 14px', borderLeft: `3px solid ${colors.border}` }}
+              >
+                <span className="font-mono text-[10px] font-semibold" style={{ color: colors.time }}>{obs.time}</span>
+                <p className="font-secondary text-[13px] text-foreground m-0" style={{ lineHeight: 1.55 }}>{obs.text}</p>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="font-secondary text-[13px] text-muted italic text-center py-8 m-0">No thought stream entries yet.</p>
+      )}
+
+      {/* Priority Legend */}
+      <div className="flex items-center gap-5 bg-sidebar rounded-xl" style={{ padding: '14px 20px' }}>
+        {[
+          { color: '#EF4444', label: 'Core identity' },
+          { color: '#F59E0B', label: 'Context' },
+          { color: '#22C55E', label: 'Action' },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded" style={{ backgroundColor: item.color }} />
+            <span className="font-secondary text-[11px] font-medium" style={{ color: '#6B7280' }}>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function BrainCard({
+  title,
+  icon,
+  color,
+  content,
+  dormant,
+  onEdit,
+}: {
+  title: string
+  icon: string
+  color: string
+  content?: string
+  dormant: boolean
+  onEdit: () => void
+}) {
+  return (
+    <button
+      onClick={onEdit}
+      className="text-left w-full bg-card border border-border rounded-2xl overflow-hidden transition-opacity cursor-pointer hover:border-foreground/20"
+      style={{ opacity: dormant ? 0.55 : 1 }}
+    >
+      <div className="w-full h-1" style={{ backgroundColor: color }} />
+      <div className="flex flex-col gap-2.5 p-4 pb-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="material-icon" style={{ fontSize: 20, color }}>{icon}</span>
+            <span className="font-secondary text-[15px] font-semibold text-foreground">{title}</span>
+          </div>
+          <span className="material-icon text-muted" style={{ fontSize: 14 }}>edit</span>
+        </div>
+        <p className={`font-secondary text-[13px] leading-relaxed line-clamp-3 m-0 ${dormant ? 'text-muted italic' : 'text-foreground'}`}>
+          {dormant
+            ? "This region hasn't formed yet"
+            : (content || '').slice(0, 200)}
+        </p>
+      </div>
+    </button>
+  )
+}
+
+function BrainEditModal({
+  title,
+  icon,
+  color,
+  value,
+  onSave,
+  onClose,
+}: {
+  title: string
+  icon: string
+  color: string
+  value: string
+  onSave: (v: string) => void
+  onClose: () => void
+}) {
+  const [text, setText] = useState(value)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    textareaRef.current?.focus()
+  }, [])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/50" />
+      <div
+        className="relative bg-background border border-border rounded-2xl w-full max-w-[600px] max-h-[80vh] flex flex-col overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="w-full h-1" style={{ backgroundColor: color }} />
+        <div className="flex items-center gap-3 px-6 pt-5 pb-3">
+          <span className="material-icon" style={{ fontSize: 22, color }}>{icon}</span>
+          <h2 className="font-secondary text-[17px] font-semibold text-foreground m-0">{title}</h2>
+        </div>
+        <div className="flex-1 px-6 pb-2 overflow-y-auto">
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={14}
+            className="w-full px-0 py-2 bg-transparent border-none font-secondary text-[13px] text-foreground leading-relaxed outline-none resize-none"
+          />
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-border">
+          <button
+            onClick={onClose}
+            className="h-9 px-4 bg-transparent border border-border rounded-lg font-secondary text-[13px] font-medium text-foreground cursor-pointer hover:bg-card"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(text)}
+            className="h-9 px-4 bg-primary text-primary-foreground border-none rounded-lg font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BrainDesigner({
+  workingMemory,
+  agentConfig,
+  providers,
+  loaded,
+  onUpdateField,
+  onUpdateModel,
+  observationalMemory,
+  onLoadObservationalMemory,
+}: {
+  workingMemory: WorkingMemory
+  agentConfig: AgentConfigState | null
+  providers: Provider[]
+  loaded: boolean
+  onUpdateField: (section: 'persona' | 'org', field: string, value: string) => Promise<void>
+  onUpdateModel: (model: string | null) => Promise<void>
+  observationalMemory: ObservationalMemoryRecord | null
+  onLoadObservationalMemory: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<(typeof BRAIN_REGIONS)[number] | null>(null)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [activeView, setActiveView] = useState<'identity' | 'subconscious'>('identity')
+
+  if (!loaded) {
+    return (
+      <div className="max-w-[720px] mx-auto flex items-center justify-center py-20">
+        <span className="font-secondary text-[13px] text-muted">Loading...</span>
+      </div>
+    )
+  }
+
+  const personaRegions = BRAIN_REGIONS.filter((r) => r.section === 'persona')
+  const orgRegions = BRAIN_REGIONS.filter((r) => r.section === 'org')
+  const activeCount = BRAIN_REGIONS.filter((r) => isRegionActive(getFieldValue(workingMemory, r.section, r.field))).length
+
+  const modelDisplay = agentConfig?.model?.split('/').pop() || 'unknown'
+
+  return (
+    <div className="max-w-[720px] mx-auto flex flex-col gap-7">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="font-secondary text-[22px] font-bold text-foreground m-0">Coworker's Mind</h1>
+          <p className="font-secondary text-[13px] text-muted m-0">Shape how they think, speak, and understand your world</p>
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setModelOpen(!modelOpen)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-card border border-border rounded-xl font-secondary cursor-pointer hover:border-foreground/20"
+          >
+            <span className="material-icon text-muted" style={{ fontSize: 16 }}>neurology</span>
+            <span className="font-mono text-[12px] font-medium text-foreground">{modelDisplay}</span>
+            <span className="material-icon text-muted" style={{ fontSize: 14 }}>unfold_more</span>
+          </button>
+          {modelOpen && (
+            <div className="absolute right-0 top-full mt-1 w-[280px] max-h-[300px] overflow-y-auto bg-card border border-border rounded-xl shadow-lg z-50">
+              {providers.map((provider) => (
+                <div key={provider.id}>
+                  <div className="px-3 py-1.5 font-secondary text-[11px] font-semibold text-muted uppercase tracking-wide">
+                    {provider.name}{!provider.connected && ' (no key)'}
+                  </div>
+                  {provider.models.map((m) => {
+                    const val = `${provider.id}/${m}`
+                    const active = val === agentConfig?.model
+                    return (
+                      <button
+                        key={val}
+                        onClick={() => { onUpdateModel(val); setModelOpen(false) }}
+                        className={`w-full text-left px-3 py-2 font-secondary text-[12px] border-none cursor-pointer ${active ? 'bg-primary/10 text-primary font-medium' : 'bg-transparent text-foreground hover:bg-sidebar'}`}
+                      >
+                        {m}
+                      </button>
+                    )
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* View Toggle */}
+      <div className="flex gap-0.5 bg-sidebar rounded-xl h-10" style={{ width: 360 }}>
+        {(['identity', 'subconscious'] as const).map((view) => {
+          const isActive = activeView === view
+          const icon = view === 'identity' ? 'person' : 'psychology'
+          const label = view === 'identity' ? 'Identity' : 'Subconscious'
+          return (
+            <button
+              key={view}
+              onClick={() => {
+                setActiveView(view)
+                if (view === 'subconscious') onLoadObservationalMemory()
+              }}
+              className={`flex-1 flex items-center justify-center gap-1.5 rounded-[9px] border font-secondary text-[13px] cursor-pointer transition-colors ${
+                isActive
+                  ? 'bg-background border-border font-semibold text-foreground'
+                  : 'bg-transparent border-transparent font-medium text-muted'
+              }`}
+            >
+              <span
+                className="material-icon"
+                style={{ fontSize: 16, color: isActive && view === 'subconscious' ? '#8B5CF6' : undefined }}
+              >
+                {icon}
+              </span>
+              {label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeView === 'identity' ? (
+        <>
+          {/* Brain activity strip */}
+          <div className="flex items-center gap-4 px-5 py-4 bg-card border border-border rounded-xl">
+            <span className="font-secondary text-[11px] font-semibold text-muted uppercase tracking-wide">Brain activity</span>
+            <div className="flex items-center gap-2">
+              {BRAIN_REGIONS.map((r) => {
+                const active = isRegionActive(getFieldValue(workingMemory, r.section, r.field))
+                return (
+                  <div
+                    key={r.field}
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{
+                      backgroundColor: r.color,
+                      opacity: active ? 1 : 0.25,
+                    }}
+                  />
+                )
+              })}
+            </div>
+            <span className="font-secondary text-[11px] text-muted">{activeCount} of {BRAIN_REGIONS.length} regions active</span>
+          </div>
+
+          {/* WHO THEY ARE */}
+          <div className="flex flex-col gap-3.5">
+            <div className="flex items-center gap-2">
+              <span className="material-icon text-muted" style={{ fontSize: 16 }}>person</span>
+              <span className="font-secondary text-[11px] font-bold text-muted uppercase tracking-wider">Who they are</span>
+            </div>
+            <BrainCard
+              title={personaRegions[0].title}
+              icon={personaRegions[0].icon}
+              color={personaRegions[0].color}
+              content={getFieldValue(workingMemory, 'persona', personaRegions[0].field)}
+              dormant={!isRegionActive(getFieldValue(workingMemory, 'persona', personaRegions[0].field))}
+              onEdit={() => setEditing(personaRegions[0])}
+            />
+            <div className="flex gap-3.5">
+              {personaRegions.slice(1, 3).map((r) => (
+                <BrainCard
+                  key={r.field}
+                  title={r.title}
+                  icon={r.icon}
+                  color={r.color}
+                  content={getFieldValue(workingMemory, 'persona', r.field)}
+                  dormant={!isRegionActive(getFieldValue(workingMemory, 'persona', r.field))}
+                  onEdit={() => setEditing(r)}
+                />
+              ))}
+            </div>
+            <BrainCard
+              title={personaRegions[3].title}
+              icon={personaRegions[3].icon}
+              color={personaRegions[3].color}
+              content={getFieldValue(workingMemory, 'persona', personaRegions[3].field)}
+              dormant={!isRegionActive(getFieldValue(workingMemory, 'persona', personaRegions[3].field))}
+              onEdit={() => setEditing(personaRegions[3])}
+            />
+          </div>
+
+          {/* WHAT THEY KNOW */}
+          <div className="flex flex-col gap-3.5">
+            <div className="flex items-center gap-2">
+              <span className="material-icon text-muted" style={{ fontSize: 16 }}>apartment</span>
+              <span className="font-secondary text-[11px] font-bold text-muted uppercase tracking-wider">What they know</span>
+            </div>
+            <div className="flex gap-3.5">
+              {orgRegions.slice(0, 2).map((r) => (
+                <BrainCard
+                  key={r.field}
+                  title={r.title}
+                  icon={r.icon}
+                  color={r.color}
+                  content={getFieldValue(workingMemory, 'org', r.field)}
+                  dormant={!isRegionActive(getFieldValue(workingMemory, 'org', r.field))}
+                  onEdit={() => setEditing(r)}
+                />
+              ))}
+            </div>
+            <div className="flex gap-3.5">
+              {orgRegions.slice(2, 4).map((r) => (
+                <BrainCard
+                  key={r.field}
+                  title={r.title}
+                  icon={r.icon}
+                  color={r.color}
+                  content={getFieldValue(workingMemory, 'org', r.field)}
+                  dormant={!isRegionActive(getFieldValue(workingMemory, 'org', r.field))}
+                  onEdit={() => setEditing(r)}
+                />
+              ))}
+            </div>
+            <BrainCard
+              title={orgRegions[4].title}
+              icon={orgRegions[4].icon}
+              color={orgRegions[4].color}
+              content={getFieldValue(workingMemory, 'org', orgRegions[4].field)}
+              dormant={!isRegionActive(getFieldValue(workingMemory, 'org', orgRegions[4].field))}
+              onEdit={() => setEditing(orgRegions[4])}
+            />
+          </div>
+
+          {/* Edit modal */}
+          {editing && (
+            <BrainEditModal
+              title={editing.title}
+              icon={editing.icon}
+              color={editing.color}
+              value={getFieldValue(workingMemory, editing.section, editing.field) || ''}
+              onSave={(v) => {
+                onUpdateField(editing.section, editing.field, v)
+                setEditing(null)
+              }}
+              onClose={() => setEditing(null)}
+            />
+          )}
+        </>
+      ) : (
+        <SubconsciousView data={observationalMemory} />
+      )}
+    </div>
+  )
+}
 
 /* ── Channels ── */
 
@@ -1491,98 +2049,12 @@ export default memo(function SettingsPage({
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState('UX')
 
-  // AI config state
-  const [model, setModel] = useState('')
-  const [instructions, setInstructions] = useState('')
-  const [defaultModel, setDefaultModel] = useState('')
-  const [defaultInstructions, setDefaultInstructions] = useState('')
-  const [isCustomModel, setIsCustomModel] = useState(false)
-  const [isCustomInstructions, setIsCustomInstructions] = useState(false)
-  const [savingModel, setSavingModel] = useState(false)
-  const [savingInstructions, setSavingInstructions] = useState(false)
-  const [configLoaded, setConfigLoaded] = useState(false)
-  const [providers, setProviders] = useState<Provider[]>([])
-
-  const loadConfig = useCallback(async () => {
-    try {
-      const [config, providerList] = await Promise.all([
-        fetchAgentConfig(),
-        fetchAIProviders(),
-      ])
-      setModel(config.model)
-      setInstructions(config.instructions)
-      setDefaultModel(config.defaultModel)
-      setDefaultInstructions(config.defaultInstructions)
-      setIsCustomModel(config.isCustomModel)
-      setIsCustomInstructions(config.isCustomInstructions)
-      // Sort: connected providers first, then alphabetically
-      setProviders(
-        providerList.sort((a, b) => {
-          if (a.connected !== b.connected) return a.connected ? -1 : 1
-          return a.name.localeCompare(b.name)
-        }),
-      )
-      setConfigLoaded(true)
-    } catch (err) {
-      console.error('Failed to load agent config:', err)
-    }
-  }, [])
+  // Brain (AI) state from Zustand
+  const { workingMemory, agentConfig, providers, brainLoaded, loadBrain, updateBrainField, updateModel, observationalMemory, loadObservationalMemory } = useAppStore()
 
   useEffect(() => {
-    if (activeTab === 'AI' && !configLoaded) loadConfig()
-  }, [activeTab, configLoaded, loadConfig])
-
-  const handleSaveModelValue = async (value: string) => {
-    setSavingModel(true)
-    try {
-      const config = await updateAgentConfig({ model: value.trim() || null })
-      setModel(config.model)
-      setIsCustomModel(config.isCustomModel)
-    } catch (err) {
-      console.error('Failed to save model:', err)
-    } finally {
-      setSavingModel(false)
-    }
-  }
-
-  const handleSaveInstructions = async () => {
-    setSavingInstructions(true)
-    try {
-      const config = await updateAgentConfig({ instructions: instructions.trim() || null })
-      setInstructions(config.instructions)
-      setIsCustomInstructions(config.isCustomInstructions)
-    } catch (err) {
-      console.error('Failed to save instructions:', err)
-    } finally {
-      setSavingInstructions(false)
-    }
-  }
-
-  const handleResetInstructions = async () => {
-    setSavingInstructions(true)
-    try {
-      const config = await updateAgentConfig({ instructions: null })
-      setInstructions(config.instructions)
-      setIsCustomInstructions(config.isCustomInstructions)
-    } catch (err) {
-      console.error('Failed to reset instructions:', err)
-    } finally {
-      setSavingInstructions(false)
-    }
-  }
-
-  const handleResetModel = async () => {
-    setSavingModel(true)
-    try {
-      const config = await updateAgentConfig({ model: null })
-      setModel(config.model)
-      setIsCustomModel(config.isCustomModel)
-    } catch (err) {
-      console.error('Failed to reset model:', err)
-    } finally {
-      setSavingModel(false)
-    }
-  }
+    if (activeTab === 'AI' && !brainLoaded) loadBrain()
+  }, [activeTab, brainLoaded, loadBrain])
 
   return (
     <PageShell>
@@ -1592,83 +2064,16 @@ export default memo(function SettingsPage({
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-8">
           {activeTab === 'AI' && (
-            <div className="max-w-[480px] mx-auto">
-              {/* Model */}
-              <div className="mb-8">
-                <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">Model</h3>
-                <p className="font-secondary text-[13px] text-muted mb-4">
-                  The language model used by the agent.
-                </p>
-                <div className="flex gap-2">
-                  <select
-                    value={model}
-                    onChange={(e) => {
-                      setModel(e.target.value)
-                      handleSaveModelValue(e.target.value)
-                    }}
-                    className="flex-1 h-10 px-3 bg-card border border-border rounded-lg font-secondary text-sm text-foreground outline-none focus:border-primary"
-                  >
-                    {providers.map((provider) => (
-                      <optgroup
-                        key={provider.id}
-                        label={`${provider.name}${provider.connected ? '' : ' (no key)'}`}
-                      >
-                        {provider.models.map((m) => (
-                          <option key={`${provider.id}/${m}`} value={`${provider.id}/${m}`}>
-                            {m}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </div>
-                <p className="font-secondary text-[12px] text-muted mt-2">
-                  Current: <span className="text-foreground">{model}</span>
-                </p>
-                {isCustomModel && (
-                  <button
-                    onClick={handleResetModel}
-                    className="mt-1 bg-transparent border-none text-muted font-secondary text-[12px] cursor-pointer hover:text-foreground p-0"
-                  >
-                    Reset to default ({defaultModel})
-                  </button>
-                )}
-              </div>
-
-              {/* System Prompt */}
-              <div className="border-t border-border pt-6">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-secondary text-[15px] font-medium text-foreground">System Prompt</h3>
-                  {isCustomInstructions && (
-                    <button
-                      onClick={handleResetInstructions}
-                      disabled={savingInstructions}
-                      className="bg-transparent border-none text-muted font-secondary text-[12px] cursor-pointer hover:text-foreground p-0"
-                    >
-                      Reset to default
-                    </button>
-                  )}
-                </div>
-                <p className="font-secondary text-[13px] text-muted mb-4">
-                  Instructions that guide the agent's behavior.
-                </p>
-                <textarea
-                  value={instructions}
-                  onChange={(e) => setInstructions(e.target.value)}
-                  rows={12}
-                  className="w-full px-3 py-2.5 bg-card border border-border rounded-lg font-secondary text-sm text-foreground placeholder:text-muted-dim outline-none focus:border-primary resize-y"
-                />
-                <div className="flex justify-end mt-3">
-                  <button
-                    onClick={handleSaveInstructions}
-                    disabled={savingInstructions}
-                    className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-lg font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {savingInstructions ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </div>
+            <BrainDesigner
+              workingMemory={workingMemory}
+              agentConfig={agentConfig}
+              providers={providers}
+              loaded={brainLoaded}
+              onUpdateField={updateBrainField}
+              onUpdateModel={updateModel}
+              observationalMemory={observationalMemory}
+              onLoadObservationalMemory={loadObservationalMemory}
+            />
           )}
 
           {activeTab === 'UX' && (
