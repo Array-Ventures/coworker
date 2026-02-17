@@ -48,22 +48,10 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Hostinger
-        uses: hostinger/deploy-on-vps@v2
+      - name: Trigger deployment
+        uses: peter-evans/repository-dispatch@v3
         with:
-          api-key: ${{ secrets.HOSTINGER_API_KEY }}
-          virtual-machine: ${{ vars.HOSTINGER_VM_ID }}
-          project-name: coworker
-          docker-compose-path: docker-compose.yml
-          environment-variables: |
-            MODEL=${{ vars.MODEL }}
-            AGENT_ID=${{ vars.AGENT_ID }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-            GOOGLE_GENERATIVE_AI_API_KEY=${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-            GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
-            NVIDIA_API_KEY=${{ secrets.NVIDIA_API_KEY }}
-            KIMI_API_KEY=${{ secrets.KIMI_API_KEY }}
-            GOG_KEYRING_PASSWORD=${{ secrets.GOG_KEYRING_PASSWORD }}
+          token: ${{ secrets.INFRA_REPO_PAT }}
+          repository: Array-Ventures/coworker-infra
+          event-type: deploy-coworker
+          client-payload: '{"sha": "${{ github.sha }}"}'
