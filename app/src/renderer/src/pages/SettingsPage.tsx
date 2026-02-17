@@ -1227,7 +1227,7 @@ function EmailSection() {
 
 /* ── A2A / API Access ── */
 
-import { MASTRA_BASE_URL } from '../mastra-client'
+import { MASTRA_BASE_URL, setMastraBaseUrl } from '../mastra-client'
 
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
@@ -2038,6 +2038,138 @@ function ChannelsContent() {
   )
 }
 
+/* ── Advanced ── */
+
+type UpdateStatus = {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
+  version?: string
+  percent?: number
+  message?: string
+}
+
+function AdvancedContent() {
+  const [serverUrl, setServerUrl] = useState(MASTRA_BASE_URL)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
+
+  useEffect(() => {
+    const unsub = (window as any).updater?.onUpdateStatus?.((data: any) => {
+      setUpdateStatus(data)
+    })
+    return () => unsub?.()
+  }, [])
+
+  const handleSaveUrl = async () => {
+    const trimmed = serverUrl.replace(/\/+$/, '')
+    setSaving(true)
+    try {
+      await setMastraBaseUrl(trimmed)
+      setServerUrl(trimmed)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCheckUpdates = () => {
+    setUpdateStatus({ status: 'checking' })
+    ;(window as any).updater?.checkForUpdates()
+  }
+
+  const handleDownload = () => {
+    ;(window as any).updater?.downloadUpdate()
+  }
+
+  const handleInstall = () => {
+    ;(window as any).updater?.installUpdate()
+  }
+
+  return (
+    <div className="max-w-[480px] mx-auto flex flex-col gap-10">
+      {/* Server Connection */}
+      <div>
+        <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">Server Connection</h3>
+        <p className="font-secondary text-[13px] text-muted mb-4">
+          Connect to a remote Mastra server or use the default local instance.
+        </p>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={serverUrl}
+            onChange={(e) => { setServerUrl(e.target.value); setSaved(false) }}
+            placeholder="http://localhost:4111"
+            className="flex-1 h-10 px-3 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary"
+          />
+          <button
+            onClick={handleSaveUrl}
+            disabled={saving || serverUrl === MASTRA_BASE_URL}
+            className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
+          >
+            {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
+          </button>
+        </div>
+        {saved && (
+          <p className="font-secondary text-[12px] text-green-500 mt-2 m-0">
+            Server URL updated. Reload the app for all connections to use the new URL.
+          </p>
+        )}
+      </div>
+
+      {/* App Updates */}
+      <div>
+        <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">App Updates</h3>
+        <p className="font-secondary text-[13px] text-muted mb-4">
+          Check for new versions and install updates.
+        </p>
+        <div className="flex items-center gap-3">
+          {updateStatus.status === 'idle' || updateStatus.status === 'not-available' || updateStatus.status === 'error' ? (
+            <button
+              onClick={handleCheckUpdates}
+              className="h-10 px-4 bg-card border border-border rounded-xl font-secondary text-[13px] font-medium text-foreground cursor-pointer hover:border-foreground/20"
+            >
+              Check for updates
+            </button>
+          ) : updateStatus.status === 'checking' ? (
+            <span className="font-secondary text-[13px] text-muted">Checking for updates...</span>
+          ) : updateStatus.status === 'available' ? (
+            <button
+              onClick={handleDownload}
+              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover"
+            >
+              Download v{updateStatus.version}
+            </button>
+          ) : updateStatus.status === 'downloading' ? (
+            <div className="flex items-center gap-3">
+              <div className="w-32 h-2 bg-border rounded-full overflow-hidden">
+                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${updateStatus.percent ?? 0}%` }} />
+              </div>
+              <span className="font-secondary text-[12px] text-muted">{Math.round(updateStatus.percent ?? 0)}%</span>
+            </div>
+          ) : updateStatus.status === 'downloaded' ? (
+            <button
+              onClick={handleInstall}
+              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover"
+            >
+              Restart & install v{updateStatus.version}
+            </button>
+          ) : null}
+        </div>
+        {updateStatus.status === 'not-available' && (
+          <p className="font-secondary text-[12px] text-muted mt-2 m-0">You're on the latest version.</p>
+        )}
+        {updateStatus.status === 'error' && (
+          <p className="font-secondary text-[12px] text-red-500 mt-2 m-0">Update error: {updateStatus.message}</p>
+        )}
+        <p className="font-secondary text-[11px] text-muted-dim mt-3 m-0">
+          Current version: {(window as any).electron?.process?.versions?.app || 'dev'}
+        </p>
+      </div>
+    </div>
+  )
+}
+
 type SettingsPageProps = {
   themeMode: ThemeMode
   onThemeChange: (mode: ThemeMode) => void
@@ -2047,7 +2179,7 @@ export default memo(function SettingsPage({
   themeMode,
   onThemeChange,
 }: SettingsPageProps) {
-  const [activeTab, setActiveTab] = useState('UX')
+  const [activeTab, setActiveTab] = useState('AI')
 
   // Brain (AI) state from Zustand
   const { workingMemory, agentConfig, providers, brainLoaded, loadBrain, updateBrainField, updateModel, observationalMemory, loadObservationalMemory } = useAppStore()
@@ -2109,7 +2241,9 @@ export default memo(function SettingsPage({
 
           {activeTab === 'Developer' && <DeveloperContent />}
 
-          {activeTab !== 'AI' && activeTab !== 'UX' && activeTab !== 'Channels' && activeTab !== 'Developer' && (
+          {activeTab === 'Advanced' && <AdvancedContent />}
+
+          {activeTab !== 'AI' && activeTab !== 'UX' && activeTab !== 'Channels' && activeTab !== 'Developer' && activeTab !== 'Advanced' && (
             <div className="flex flex-col items-center justify-center text-center flex-1 min-h-[300px]">
               <span className="material-icon text-muted-dim mb-4" style={{ fontSize: 48 }}>settings</span>
               <h2 className="font-primary text-lg font-semibold text-foreground mb-2">{activeTab}</h2>

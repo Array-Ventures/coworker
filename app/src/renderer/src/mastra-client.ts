@@ -15,15 +15,41 @@ export type InstalledSkillInfo = {
   skillsShSource?: { owner: string; repo: string }
 }
 
-export const MASTRA_BASE_URL =
-  (import.meta as any).env?.VITE_MASTRA_BASE_URL || 'http://localhost:4111'
+const DEFAULT_BASE_URL = 'http://localhost:4111'
+
+export let MASTRA_BASE_URL = DEFAULT_BASE_URL
 
 export const AGENT_ID = 'coworker'
 export const RESOURCE_ID = 'coworker'
 
-export const mastraClient = new MastraClient({
+export let mastraClient = new MastraClient({
   baseUrl: MASTRA_BASE_URL,
 })
+
+/** Load persisted server URL from electron-store (call once on app init) */
+export async function initMastraBaseUrl(): Promise<string> {
+  try {
+    const saved = await (window as any).settings?.get('mastraBaseUrl')
+    if (saved && typeof saved === 'string') {
+      MASTRA_BASE_URL = saved
+      mastraClient = new MastraClient({ baseUrl: saved })
+    }
+  } catch {
+    // electron-store not available — keep default
+  }
+  return MASTRA_BASE_URL
+}
+
+/** Update the server URL and persist it */
+export async function setMastraBaseUrl(url: string): Promise<void> {
+  MASTRA_BASE_URL = url
+  mastraClient = new MastraClient({ baseUrl: url })
+  try {
+    await (window as any).settings?.set('mastraBaseUrl', url)
+  } catch {
+    // ignore if not in Electron
+  }
+}
 
 export async function fetchThreads() {
   const result = await mastraClient.listMemoryThreads({

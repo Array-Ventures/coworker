@@ -3,11 +3,22 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import log from 'electron-log'
+import Store from 'electron-store'
 
 // Configure auto-updater logging
 autoUpdater.logger = log
 autoUpdater.autoDownload = false
 autoUpdater.autoInstallOnAppQuit = true
+
+// ── Persistent settings ──
+const store = new Store({
+  schema: {
+    mastraBaseUrl: {
+      type: 'string',
+      default: 'http://localhost:4111',
+    },
+  },
+})
 
 let mainWindow: BrowserWindow | null = null
 
@@ -73,6 +84,13 @@ app.whenReady().then(() => {
   autoUpdater.on('error', (error) => {
     log.error('Auto-updater error:', error)
     mainWindow?.webContents.send('update-status', { status: 'error', message: error.message })
+  })
+
+  // ── Settings IPC ──
+  ipcMain.handle('get-setting', (_e, key: string) => store.get(key))
+  ipcMain.handle('set-setting', (_e, key: string, value: any) => {
+    store.set(key, value)
+    return true
   })
 
   ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates())
