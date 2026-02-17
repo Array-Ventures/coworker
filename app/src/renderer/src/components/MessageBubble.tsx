@@ -14,7 +14,7 @@ import { code } from '@streamdown/code'
 import 'streamdown/styles.css'
 
 const streamdownPlugins = { code }
-const sandboxConfig = { url: new URL('/sandbox_proxy.html', window.location.origin) }
+const sandboxConfig = { url: new URL('./sandbox_proxy.html', window.location.href) }
 
 type MessageBubbleProps = {
   message: UIMessage

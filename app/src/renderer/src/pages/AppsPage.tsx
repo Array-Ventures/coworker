@@ -12,7 +12,7 @@ type AppEntry = {
   name: string
 }
 
-const sandboxConfig = { url: new URL('/sandbox_proxy.html', window.location.origin) }
+const sandboxConfig = { url: new URL('./sandbox_proxy.html', window.location.href) }
 
 export default memo(function AppsPage() {
   const [apps, setApps] = useState<AppEntry[]>([])
