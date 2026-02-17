@@ -34,6 +34,7 @@ function buildWorkspace() {
         HOME: GOG_HOME,
         GOG_KEYRING_BACKEND: 'file',
         GOG_KEYRING_PASSWORD: process.env.GOG_KEYRING_PASSWORD || '',
+        GH_TOKEN: process.env.GH_TOKEN || '',
       },
       isolation: detection.available ? detection.backend : "none",
       nativeSandbox: {

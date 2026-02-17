@@ -12,9 +12,10 @@ import { type McpSlice, createMcpSlice } from './slices/mcpSlice'
 import { type McpRegistrySlice, createMcpRegistrySlice } from './slices/mcpRegistrySlice'
 import { type A2aSlice, createA2aSlice } from './slices/a2aSlice'
 import { type GogSlice, createGogSlice } from './slices/gogSlice'
+import { type GhSlice, createGhSlice } from './slices/ghSlice'
 import { type BrainSlice, createBrainSlice } from './slices/brainSlice'
 
-export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & BrainSlice
+export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & GhSlice & BrainSlice
 
 export const useAppStore = create<AppStore>()((...a) => ({
   ...createUISlice(...a),
@@ -27,5 +28,6 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createMcpRegistrySlice(...a),
   ...createA2aSlice(...a),
   ...createGogSlice(...a),
+  ...createGhSlice(...a),
   ...createBrainSlice(...a),
 }))

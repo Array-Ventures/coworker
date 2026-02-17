@@ -446,6 +446,32 @@ export async function removeGogAccount(email: string): Promise<{ ok: boolean }> 
   return res.json()
 }
 
+// ── GitHub (gh CLI) ──
+
+export async function fetchGhStatus(): Promise<{ installed: boolean; loggedIn: boolean; username: string | null }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/status`)
+  return res.json()
+}
+
+export async function ghStartAuth(): Promise<{ userCode: string; authUrl: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/start`, { method: 'POST' })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({ error: 'Failed to start auth' }))
+    throw new Error(data.error || 'Failed to start auth')
+  }
+  return res.json()
+}
+
+export async function ghPollAuth(): Promise<{ ok: boolean; username?: string; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/poll`, { method: 'POST' })
+  return res.json()
+}
+
+export async function ghLogout(): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/logout`, { method: 'POST' })
+  return res.json()
+}
+
 // ── WhatsApp ──
 
 export interface WhatsAppStatus {

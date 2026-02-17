@@ -1225,6 +1225,249 @@ function EmailSection() {
   )
 }
 
+/* ── GitHub (gh CLI) ── */
+
+function GitHubSection() {
+  const ghInstalled = useAppStore((s) => s.ghInstalled)
+  const ghLoggedIn = useAppStore((s) => s.ghLoggedIn)
+  const ghUsername = useAppStore((s) => s.ghUsername)
+  const ghLoaded = useAppStore((s) => s.ghLoaded)
+  const ghAuthInProgress = useAppStore((s) => s.ghAuthInProgress)
+  const ghUserCode = useAppStore((s) => s.ghUserCode)
+  const ghAuthUrl = useAppStore((s) => s.ghAuthUrl)
+  const ghAuthError = useAppStore((s) => s.ghAuthError)
+  const loadGhStatus = useAppStore((s) => s.loadGhStatus)
+  const ghStartLogin = useAppStore((s) => s.ghStartLogin)
+  const ghPollAuthStatus = useAppStore((s) => s.ghPollAuthStatus)
+  const ghDoLogout = useAppStore((s) => s.ghDoLogout)
+  const ghClearAuth = useAppStore((s) => s.ghClearAuth)
+
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ ok: boolean; username?: string; error?: string } | null>(null)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (!ghLoaded) loadGhStatus()
+  }, [ghLoaded, loadGhStatus])
+
+  // Poll for auth completion when auth is in progress
+  useEffect(() => {
+    if (ghAuthInProgress && ghUserCode && !pollingRef.current) {
+      pollingRef.current = setInterval(async () => {
+        const done = await ghPollAuthStatus()
+        if (done && pollingRef.current) {
+          clearInterval(pollingRef.current)
+          pollingRef.current = null
+        }
+      }, 3000)
+    }
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+        pollingRef.current = null
+      }
+    }
+  }, [ghAuthInProgress, ghUserCode, ghPollAuthStatus])
+
+  const handleConnect = async () => {
+    setTestResult(null)
+    await ghStartLogin()
+  }
+
+  const handleTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      await loadGhStatus()
+      const state = useAppStore.getState()
+      if (state.ghLoggedIn) {
+        setTestResult({ ok: true, username: state.ghUsername || undefined })
+      } else {
+        setTestResult({ ok: false, error: 'Not authenticated' })
+      }
+    } catch (err: any) {
+      setTestResult({ ok: false, error: err.message })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const handleDisconnect = async () => {
+    setDisconnecting(true)
+    try {
+      await ghDoLogout()
+      setTestResult(null)
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
+  const handleCancel = () => {
+    ghClearAuth()
+  }
+
+  return (
+    <div className="flex flex-col" style={{ gap: 12 }}>
+      <div>
+        <h3 className="font-secondary text-[18px] font-semibold text-foreground mb-1">
+          GitHub
+        </h3>
+        <p className="font-secondary text-[14px] text-muted" style={{ maxWidth: 600 }}>
+          Connect your GitHub account to enable git operations and repository access in the workspace.
+        </p>
+      </div>
+
+      {/* Not installed */}
+      {ghLoaded && !ghInstalled && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl" style={{ padding: 20 }}>
+          <div className="flex items-start gap-3">
+            <span className="material-icon text-amber-600 dark:text-amber-400 shrink-0" style={{ fontSize: 20 }}>warning</span>
+            <div>
+              <p className="font-secondary text-[14px] font-medium text-foreground mb-1">
+                GitHub CLI not found
+              </p>
+              <p className="font-secondary text-[13px] text-muted mb-3">
+                The GitHub CLI is required to enable repository access. Install it to connect your GitHub account.
+              </p>
+              <code className="font-mono text-[13px] text-foreground bg-sidebar rounded-md inline-block" style={{ padding: '6px 12px' }}>
+                brew install gh
+              </code>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auth in progress — device flow */}
+      {ghInstalled && ghAuthInProgress && ghUserCode && (
+        <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
+          <div className="flex items-center gap-2 mb-4">
+            <span className="material-icon text-amber-500" style={{ fontSize: 18 }}>pending</span>
+            <span className="font-secondary text-[14px] font-medium text-foreground">
+              Authorization in progress
+            </span>
+          </div>
+
+          {/* Step 1: Copy code */}
+          <p className="font-secondary text-[13px] font-medium text-muted mb-2">
+            Step 1: Copy your one-time code
+          </p>
+          <div
+            className="flex items-center justify-center gap-3 bg-sidebar rounded-lg cursor-pointer hover:bg-sidebar/80 transition-colors mb-4"
+            style={{ padding: '14px 16px' }}
+            onClick={() => navigator.clipboard.writeText(ghUserCode)}
+          >
+            <code className="font-mono text-[24px] font-bold text-foreground tracking-[0.2em]">{ghUserCode}</code>
+            <span className="material-icon text-muted shrink-0" style={{ fontSize: 18 }}>content_copy</span>
+          </div>
+
+          {/* Step 2: Open GitHub */}
+          <p className="font-secondary text-[13px] font-medium text-muted mb-2">
+            Step 2: Open GitHub and paste the code
+          </p>
+          <button
+            onClick={() => window.open(ghAuthUrl || 'https://github.com/login/device', '_blank')}
+            className="flex items-center gap-2 font-secondary text-[13px] font-medium text-primary hover:text-primary-hover transition-colors mb-4"
+          >
+            <span className="material-icon" style={{ fontSize: 16 }}>open_in_new</span>
+            Open github.com/login/device
+          </button>
+
+          {/* Waiting */}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-icon animate-spin text-muted" style={{ fontSize: 16 }}>progress_activity</span>
+            <span className="font-secondary text-[13px] text-muted">Waiting for authorization...</span>
+          </div>
+
+          {ghAuthError && (
+            <p className="font-secondary text-[13px] text-red-500 mb-3">{ghAuthError}</p>
+          )}
+
+          <button
+            onClick={handleCancel}
+            className="font-secondary text-[13px] font-medium text-muted hover:text-foreground transition-colors"
+            style={{ height: 36, padding: '0 12px' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Connected */}
+      {ghInstalled && ghLoggedIn && !ghAuthInProgress && (
+        <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
+          <div className="flex items-center justify-between mb-3">
+            <span className="font-secondary text-[14px] font-medium text-foreground">GitHub Account</span>
+            <StatusBadge label="Connected" variant="success" />
+          </div>
+
+          <div className="bg-sidebar rounded-lg" style={{ padding: '12px 14px' }}>
+            <div className="flex items-center gap-3">
+              <span className="material-icon text-muted" style={{ fontSize: 20 }}>person</span>
+              <p className="font-secondary text-[14px] font-medium text-foreground flex-1">
+                {ghUsername || 'Authenticated'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 mt-2" style={{ marginLeft: 32 }}>
+              <button
+                onClick={handleTest}
+                disabled={testing}
+                className="flex items-center gap-1 font-secondary text-[12px] font-medium text-muted hover:text-foreground transition-colors disabled:opacity-50"
+                style={{ padding: '4px 8px' }}
+              >
+                {testing ? (
+                  <span className="material-icon animate-spin" style={{ fontSize: 14 }}>progress_activity</span>
+                ) : (
+                  <span className="material-icon" style={{ fontSize: 14 }}>science</span>
+                )}
+                Test
+              </button>
+
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="flex items-center gap-1 font-secondary text-[12px] font-medium text-red-500 hover:text-red-600 transition-colors disabled:opacity-50"
+                style={{ padding: '4px 8px' }}
+              >
+                <span className="material-icon" style={{ fontSize: 14 }}>logout</span>
+                {disconnecting ? 'Disconnecting...' : 'Disconnect'}
+              </button>
+
+              {testResult && (
+                <span className={`font-secondary text-[12px] ${testResult.ok ? 'text-green-600' : 'text-red-500'}`}>
+                  {testResult.ok ? `OK (${testResult.username})` : testResult.error || 'Failed'}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Not connected — connect button */}
+      {ghInstalled && !ghLoggedIn && !ghAuthInProgress && (
+        <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
+          <p className="font-secondary text-[14px] font-medium text-foreground mb-1">Connect GitHub</p>
+          <p className="font-secondary text-[13px] text-muted mb-3">
+            Authenticate with GitHub to enable git operations and private repository access.
+          </p>
+          <button
+            onClick={handleConnect}
+            className="flex items-center gap-2 font-secondary text-[13px] font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors"
+            style={{ height: 36, padding: '0 16px' }}
+          >
+            <span className="material-icon" style={{ fontSize: 16 }}>login</span>
+            Connect GitHub
+          </button>
+          {ghAuthError && (
+            <p className="font-secondary text-[13px] text-red-500 mt-2">{ghAuthError}</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── A2A / API Access ── */
 
 import { MASTRA_BASE_URL, setMastraBaseUrl } from '../mastra-client'
@@ -2241,9 +2484,15 @@ export default memo(function SettingsPage({
 
           {activeTab === 'Developer' && <DeveloperContent />}
 
+          {activeTab === 'Integrations' && (
+            <div className="max-w-[640px] mx-auto flex flex-col" style={{ gap: 32 }}>
+              <GitHubSection />
+            </div>
+          )}
+
           {activeTab === 'Advanced' && <AdvancedContent />}
 
-          {activeTab !== 'AI' && activeTab !== 'UX' && activeTab !== 'Channels' && activeTab !== 'Developer' && activeTab !== 'Advanced' && (
+          {activeTab !== 'AI' && activeTab !== 'UX' && activeTab !== 'Channels' && activeTab !== 'Developer' && activeTab !== 'Integrations' && activeTab !== 'Advanced' && (
             <div className="flex flex-col items-center justify-center text-center flex-1 min-h-[300px]">
               <span className="material-icon text-muted-dim mb-4" style={{ fontSize: 48 }}>settings</span>
               <h2 className="font-primary text-lg font-semibold text-foreground mb-2">{activeTab}</h2>
