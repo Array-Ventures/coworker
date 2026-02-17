@@ -1,6 +1,6 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { getSemanticRecall } from '../memory';
+import { getSemanticRecall, coworkerMemory } from '../memory';
 
 export const searchMemoryTool = createTool({
   id: 'search-memory',
@@ -32,11 +32,24 @@ export const searchMemoryTool = createTool({
         return { results: [], message: 'No relevant memories found.' };
       }
 
+      // Look up thread titles for context
+      const uniqueThreadIds = [...new Set(messages.map((m: any) => m.threadId).filter(Boolean))];
+      const titleMap: Record<string, string> = {};
+      await Promise.all(
+        uniqueThreadIds.map(async (tid: string) => {
+          try {
+            const thread = await coworkerMemory.getThreadById({ threadId: tid });
+            if (thread?.title) titleMap[tid] = thread.title;
+          } catch { /* skip */ }
+        }),
+      );
+
       const results = messages.map((m: any) => ({
         role: m.role,
         content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
         createdAt: m.createdAt,
         threadId: m.threadId,
+        threadTitle: titleMap[m.threadId] || undefined,
       }));
 
       return { results, count: results.length };
