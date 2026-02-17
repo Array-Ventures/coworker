@@ -123,6 +123,7 @@ export async function getSemanticRecall(): Promise<SemanticRecall> {
     storage: memoryStore,
     vector: coworkerVector,
     embedder: fastembed,
+    indexName: "memory_messages",
     topK: 10,
     messageRange: 1,
     scope: "resource",
