@@ -12,7 +12,7 @@ import {
 } from './whatsapp-session';
 import { WhatsAppBridge } from './whatsapp-bridge';
 import { normalizeWhatsAppId } from './whatsapp-utils';
-import { db } from '../db';
+import { pool } from '../db';
 
 export interface WhatsAppState {
   status: WhatsAppConnectionStatus;
@@ -138,7 +138,7 @@ export class WhatsAppManager {
   // ── Allowlist CRUD ──
 
   async listAllowlist(): Promise<{ phoneNumber: string; rawJid: string | null; label: string | null; createdAt: string }[]> {
-    const result = await db.execute('SELECT * FROM whatsapp_allowlist ORDER BY created_at DESC');
+    const result = await pool.query('SELECT * FROM whatsapp_allowlist ORDER BY created_at DESC');
     return result.rows.map((r: any) => ({
       phoneNumber: r.phone_number,
       rawJid: r.raw_jid,
@@ -150,29 +150,29 @@ export class WhatsAppManager {
   async addToAllowlist(phoneNumber: string, label?: string): Promise<void> {
     const normalized = normalizeWhatsAppId(phoneNumber);
     if (!normalized) throw new Error('Invalid phone number');
-    await db.execute({
-      sql: `INSERT INTO whatsapp_allowlist (phone_number, label)
-            VALUES (?, ?)
-            ON CONFLICT(phone_number) DO UPDATE SET label = ?`,
-      args: [normalized, label ?? null, label ?? null],
-    });
+    await pool.query(
+      `INSERT INTO whatsapp_allowlist (phone_number, label)
+       VALUES ($1, $2)
+       ON CONFLICT(phone_number) DO UPDATE SET label = $3`,
+      [normalized, label ?? null, label ?? null],
+    );
   }
 
   async removeFromAllowlist(phoneNumber: string): Promise<void> {
     const normalized = normalizeWhatsAppId(phoneNumber);
-    await db.execute({
-      sql: 'DELETE FROM whatsapp_allowlist WHERE phone_number = ? OR raw_jid = ?',
-      args: [normalized, phoneNumber],
-    });
+    await pool.query(
+      'DELETE FROM whatsapp_allowlist WHERE phone_number = $1 OR raw_jid = $2',
+      [normalized, phoneNumber],
+    );
   }
 
   // ── Pairing ──
 
   async approvePairing(code: string): Promise<{ ok: boolean; error?: string }> {
-    const result = await db.execute({
-      sql: `SELECT * FROM whatsapp_pairing WHERE code = ?`,
-      args: [code],
-    });
+    const result = await pool.query(
+      'SELECT * FROM whatsapp_pairing WHERE code = $1',
+      [code],
+    );
 
     if (result.rows.length === 0) {
       return { ok: false, error: 'Invalid pairing code' };
@@ -181,7 +181,7 @@ export class WhatsAppManager {
     const row = result.rows[0] as any;
     const expiresAt = new Date(row.expires_at).getTime();
     if (Date.now() > expiresAt) {
-      await db.execute({ sql: 'DELETE FROM whatsapp_pairing WHERE code = ?', args: [code] });
+      await pool.query('DELETE FROM whatsapp_pairing WHERE code = $1', [code]);
       return { ok: false, error: 'Pairing code has expired' };
     }
 
@@ -189,15 +189,15 @@ export class WhatsAppManager {
     const phone = normalizeWhatsAppId(rawJid);
 
     // Add to allowlist with raw_jid
-    await db.execute({
-      sql: `INSERT INTO whatsapp_allowlist (phone_number, raw_jid)
-            VALUES (?, ?)
-            ON CONFLICT(phone_number) DO UPDATE SET raw_jid = ?`,
-      args: [phone, rawJid, rawJid],
-    });
+    await pool.query(
+      `INSERT INTO whatsapp_allowlist (phone_number, raw_jid)
+       VALUES ($1, $2)
+       ON CONFLICT(phone_number) DO UPDATE SET raw_jid = $3`,
+      [phone, rawJid, rawJid],
+    );
 
     // Clean up pairing entry
-    await db.execute({ sql: 'DELETE FROM whatsapp_pairing WHERE code = ?', args: [code] });
+    await pool.query('DELETE FROM whatsapp_pairing WHERE code = $1', [code]);
 
     console.log(`[whatsapp] pairing approved: code=${code} jid=${rawJid} phone=${phone}`);
     return { ok: true };
@@ -206,20 +206,20 @@ export class WhatsAppManager {
   // ── Config helpers ──
 
   async getConfig(key: string): Promise<string | null> {
-    const result = await db.execute({
-      sql: 'SELECT value FROM whatsapp_config WHERE key = ?',
-      args: [key],
-    });
+    const result = await pool.query(
+      'SELECT value FROM whatsapp_config WHERE key = $1',
+      [key],
+    );
     return result.rows.length > 0 ? (result.rows[0].value as string) : null;
   }
 
   async setConfig(key: string, value: string): Promise<void> {
-    await db.execute({
-      sql: `INSERT INTO whatsapp_config (key, value, updated_at)
-            VALUES (?, ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')`,
-      args: [key, value, value],
-    });
+    await pool.query(
+      `INSERT INTO whatsapp_config (key, value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT(key) DO UPDATE SET value = $3, updated_at = NOW()`,
+      [key, value, value],
+    );
   }
 
   // ── Reconnect logic ──

@@ -1,4 +1,4 @@
-import { LibSQLStore, LibSQLVector } from "@mastra/libsql";
+import { PostgresStore, PgVector } from "@mastra/pg";
 import { Memory } from "@mastra/memory";
 import { SemanticRecall } from "@mastra/core/processors";
 import { fastembed } from "@mastra/fastembed";
@@ -74,14 +74,14 @@ when something moves me I get quiet about it, not loud.`,
 };
 
 // ── Shared storage & vector instances ──
-const coworkerStorage = new LibSQLStore({
+const coworkerStorage = new PostgresStore({
   id: "coworker-storage",
-  url: DB_URL,
+  connectionString: DB_URL,
 });
 
-const coworkerVector = new LibSQLVector({
+const coworkerVector = new PgVector({
   id: "coworker-vector",
-  url: DB_URL,
+  connectionString: DB_URL,
 });
 
 export const coworkerMemory = new Memory({

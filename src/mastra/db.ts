@@ -1,11 +1,13 @@
-import { createClient } from '@libsql/client';
+import pg from 'pg';
 
-export const DB_URL = process.env.DATABASE_URL || 'file:../../mastra.db';
+export const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/postgres';
 
-export const db = createClient({ url: DB_URL });
+export const pool = new pg.Pool({ connectionString: DB_URL });
 
 export async function initCustomTables() {
-  await db.execute(`
+  await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -13,52 +15,45 @@ export async function initCustomTables() {
       cron TEXT NOT NULL,
       schedule_config TEXT,
       prompt TEXT NOT NULL,
-      notify INTEGER DEFAULT 1,
-      enabled INTEGER DEFAULT 1,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
-      last_run_at TEXT
+      notify BOOLEAN DEFAULT TRUE,
+      enabled BOOLEAN DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      last_run_at TIMESTAMPTZ
     )
   `);
 
-  await db.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS agent_config (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
-  await db.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_allowlist (
       phone_number TEXT PRIMARY KEY,
       raw_jid TEXT,
       label TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
-  // Add raw_jid column if upgrading from older schema
-  try {
-    await db.execute(`ALTER TABLE whatsapp_allowlist ADD COLUMN raw_jid TEXT`);
-  } catch {
-    // column already exists
-  }
-
-  await db.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_pairing (
       code TEXT PRIMARY KEY,
       raw_jid TEXT NOT NULL,
-      created_at TEXT DEFAULT (datetime('now')),
-      expires_at TEXT NOT NULL
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL
     )
   `);
 
-  await db.execute(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS whatsapp_config (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
-      updated_at TEXT DEFAULT (datetime('now'))
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 }

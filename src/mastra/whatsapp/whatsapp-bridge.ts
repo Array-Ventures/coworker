@@ -9,7 +9,7 @@ import {
   MAX_WHATSAPP_TEXT_LENGTH,
   SentMessageTracker,
 } from './whatsapp-utils';
-import { db } from '../db';
+import { pool } from '../db';
 
 const PAIRING_TTL_MS = 60 * 60_000; // 1 hour
 
@@ -100,27 +100,27 @@ export class WhatsAppBridge {
 
   private async sendPairingCode(remoteJid: string): Promise<void> {
     // Check if there's already a pending pairing for this JID
-    const existing = await db.execute({
-      sql: `SELECT code FROM whatsapp_pairing WHERE raw_jid = ? AND expires_at > datetime('now')`,
-      args: [remoteJid],
-    });
+    const existing = await pool.query(
+      'SELECT code FROM whatsapp_pairing WHERE raw_jid = $1 AND expires_at > NOW()',
+      [remoteJid],
+    );
 
     let code: string;
     if (existing.rows.length > 0) {
       code = existing.rows[0].code as string;
     } else {
       // Clean up any expired entries for this JID
-      await db.execute({
-        sql: 'DELETE FROM whatsapp_pairing WHERE raw_jid = ?',
-        args: [remoteJid],
-      });
+      await pool.query(
+        'DELETE FROM whatsapp_pairing WHERE raw_jid = $1',
+        [remoteJid],
+      );
 
       code = generatePairingCode();
       const expiresAt = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
-      await db.execute({
-        sql: `INSERT INTO whatsapp_pairing (code, raw_jid, expires_at) VALUES (?, ?, ?)`,
-        args: [code, remoteJid, expiresAt],
-      });
+      await pool.query(
+        'INSERT INTO whatsapp_pairing (code, raw_jid, expires_at) VALUES ($1, $2, $3)',
+        [code, remoteJid, expiresAt],
+      );
     }
 
     console.log(`[whatsapp-bridge] sent pairing code ${code} for JID ${remoteJid}`);
@@ -188,10 +188,10 @@ export class WhatsAppBridge {
   /** Check allowlist by raw JID or normalized phone number. */
   private async isAllowed(rawJid: string, phone: string): Promise<boolean> {
     try {
-      const result = await db.execute({
-        sql: 'SELECT phone_number FROM whatsapp_allowlist WHERE raw_jid = ? OR phone_number = ?',
-        args: [rawJid, phone],
-      });
+      const result = await pool.query(
+        'SELECT phone_number FROM whatsapp_allowlist WHERE raw_jid = $1 OR phone_number = $2',
+        [rawJid, phone],
+      );
       return result.rows.length > 0;
     } catch (err) {
       console.error('[whatsapp-bridge] allowlist check failed:', err);

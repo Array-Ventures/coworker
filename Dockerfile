@@ -2,7 +2,7 @@ FROM oven/bun:1-debian AS builder
 
 WORKDIR /app
 
-# Install build dependencies for native modules (fastembed, libsql)
+# Install build dependencies for native modules (fastembed)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 make g++ nodejs npm && \
     rm -rf /var/lib/apt/lists/*

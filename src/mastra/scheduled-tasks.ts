@@ -1,5 +1,5 @@
 import type { Mastra } from '@mastra/core/mastra';
-import { db } from './db';
+import { pool } from './db';
 import { createTaskWorkflow } from './workflows/scheduled-task';
 import { toCron, type ScheduleConfig } from './cron-utils';
 
@@ -39,8 +39,8 @@ function rowToTask(row: Record<string, any>): ScheduledTask {
     cron: row.cron,
     scheduleConfig: row.schedule_config ? JSON.parse(row.schedule_config) : null,
     prompt: row.prompt,
-    notify: row.notify === 1,
-    enabled: row.enabled === 1,
+    notify: row.notify === true,
+    enabled: row.enabled === true,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastRunAt: row.last_run_at,
@@ -57,8 +57,8 @@ export class ScheduledTaskManager {
   async init(): Promise<void> {
     await this.seedDefaults();
 
-    const result = await db.execute(
-      'SELECT * FROM scheduled_tasks WHERE enabled = 1',
+    const result = await pool.query(
+      'SELECT * FROM scheduled_tasks WHERE enabled = TRUE',
     );
     for (const row of result.rows) {
       const task = rowToTask(row as Record<string, any>);
@@ -68,10 +68,10 @@ export class ScheduledTaskManager {
   }
 
   private async seedDefaults(): Promise<void> {
-    const existing = await db.execute({
-      sql: 'SELECT id FROM scheduled_tasks WHERE id = ?',
-      args: ['heartbeat'],
-    });
+    const existing = await pool.query(
+      'SELECT id FROM scheduled_tasks WHERE id = $1',
+      ['heartbeat'],
+    );
     if (existing.rows.length > 0) return;
 
     const prompt = `TRIGGER: Scheduled heartbeat
@@ -86,25 +86,25 @@ This is your time. You can:
 
     const config: ScheduleConfig = { type: 'custom', cron: '*/30 * * * *' };
 
-    await db.execute({
-      sql: `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify, enabled)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      args: ['heartbeat', 'Heartbeat', 'custom', '*/30 * * * *', JSON.stringify(config), prompt, 0, 1],
-    });
+    await pool.query(
+      `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify, enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      ['heartbeat', 'Heartbeat', 'custom', '*/30 * * * *', JSON.stringify(config), prompt, false, true],
+    );
   }
 
   async list(): Promise<ScheduledTask[]> {
-    const result = await db.execute(
+    const result = await pool.query(
       'SELECT * FROM scheduled_tasks ORDER BY created_at DESC',
     );
     return result.rows.map((row) => rowToTask(row as Record<string, any>));
   }
 
   async get(id: string): Promise<ScheduledTask | null> {
-    const result = await db.execute({
-      sql: 'SELECT * FROM scheduled_tasks WHERE id = ?',
-      args: [id],
-    });
+    const result = await pool.query(
+      'SELECT * FROM scheduled_tasks WHERE id = $1',
+      [id],
+    );
     if (result.rows.length === 0) return null;
     return rowToTask(result.rows[0] as Record<string, any>);
   }
@@ -113,19 +113,19 @@ This is your time. You can:
     const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const cron = toCron(input.scheduleConfig);
 
-    await db.execute({
-      sql: `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify)
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      args: [
+    await pool.query(
+      `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
         id,
         input.name,
         input.scheduleConfig.type,
         cron,
         JSON.stringify(input.scheduleConfig),
         input.prompt,
-        input.notify !== false ? 1 : 0,
+        input.notify !== false,
       ],
-    });
+    );
 
     const workflow = createTaskWorkflow(id, cron, input.prompt, input.name);
     this.mastra.addWorkflow(workflow);
@@ -139,32 +139,33 @@ This is your time. You can:
 
     const sets: string[] = [];
     const args: any[] = [];
+    let paramIndex = 1;
 
     if (data.name !== undefined) {
-      sets.push('name = ?');
+      sets.push(`name = $${paramIndex++}`);
       args.push(data.name);
     }
     if (data.prompt !== undefined) {
-      sets.push('prompt = ?');
+      sets.push(`prompt = $${paramIndex++}`);
       args.push(data.prompt);
     }
     if (data.notify !== undefined) {
-      sets.push('notify = ?');
-      args.push(data.notify ? 1 : 0);
+      sets.push(`notify = $${paramIndex++}`);
+      args.push(data.notify);
     }
     if (data.scheduleConfig !== undefined) {
       const cron = toCron(data.scheduleConfig);
-      sets.push('schedule_type = ?', 'cron = ?', 'schedule_config = ?');
+      sets.push(`schedule_type = $${paramIndex++}`, `cron = $${paramIndex++}`, `schedule_config = $${paramIndex++}`);
       args.push(data.scheduleConfig.type, cron, JSON.stringify(data.scheduleConfig));
     }
 
     if (sets.length > 0) {
-      sets.push("updated_at = datetime('now')");
+      sets.push('updated_at = NOW()');
       args.push(id);
-      await db.execute({
-        sql: `UPDATE scheduled_tasks SET ${sets.join(', ')} WHERE id = ?`,
+      await pool.query(
+        `UPDATE scheduled_tasks SET ${sets.join(', ')} WHERE id = $${paramIndex}`,
         args,
-      });
+      );
     }
 
     // Re-register workflow with updated config if schedule or prompt changed
@@ -180,18 +181,18 @@ This is your time. You can:
   }
 
   async delete(id: string): Promise<void> {
-    await db.execute({
-      sql: 'DELETE FROM scheduled_tasks WHERE id = ?',
-      args: [id],
-    });
+    await pool.query(
+      'DELETE FROM scheduled_tasks WHERE id = $1',
+      [id],
+    );
     // Workflow remains in mastra memory until restart, but won't re-register on next boot
   }
 
   async toggle(id: string, enabled: boolean): Promise<void> {
-    await db.execute({
-      sql: "UPDATE scheduled_tasks SET enabled = ?, updated_at = datetime('now') WHERE id = ?",
-      args: [enabled ? 1 : 0, id],
-    });
+    await pool.query(
+      'UPDATE scheduled_tasks SET enabled = $1, updated_at = NOW() WHERE id = $2',
+      [enabled, id],
+    );
 
     if (enabled) {
       const task = await this.get(id);

@@ -1,6 +1,6 @@
 import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
 import { Mastra } from '@mastra/core/mastra';
-import { LibSQLStore } from '@mastra/libsql';
+import { PostgresStore } from '@mastra/pg';
 import { PinoLogger } from '@mastra/loggers';
 import { chatRoute } from '@mastra/ai-sdk';
 import { registerApiRoute } from '@mastra/core/server';
@@ -411,7 +411,7 @@ export const mastra = new Mastra({
       }),
     ],
   },
-  storage: new LibSQLStore({ id: 'mastra-storage', url: DB_URL }),
+  storage: new PostgresStore({ id: 'mastra-storage', connectionString: DB_URL }),
   logger: new PinoLogger({
     name: 'Mastra',
     level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',

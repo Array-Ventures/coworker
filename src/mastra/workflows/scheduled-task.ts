@@ -1,7 +1,7 @@
 import { init } from '@mastra/inngest';
 import { z } from 'zod';
 import { inngest } from '../inngest';
-import { db } from '../db';
+import { pool } from '../db';
 
 const { createWorkflow, createStep } = init(inngest);
 
@@ -11,11 +11,11 @@ const executeStep = createStep({
   outputSchema: z.object({ result: z.string() }),
   execute: async ({ inputData, mastra }) => {
     // Check if task is still enabled before running
-    const check = await db.execute({
-      sql: 'SELECT enabled FROM scheduled_tasks WHERE id = ?',
-      args: [inputData.taskId],
-    });
-    if (!check.rows[0] || check.rows[0].enabled === 0) {
+    const check = await pool.query(
+      'SELECT enabled FROM scheduled_tasks WHERE id = $1',
+      [inputData.taskId],
+    );
+    if (!check.rows[0] || check.rows[0].enabled === false) {
       return { result: '[skipped — task disabled]' };
     }
 
@@ -39,10 +39,10 @@ const executeStep = createStep({
     );
 
     // Update last_run_at
-    await db.execute({
-      sql: "UPDATE scheduled_tasks SET last_run_at = datetime('now') WHERE id = ?",
-      args: [inputData.taskId],
-    });
+    await pool.query(
+      'UPDATE scheduled_tasks SET last_run_at = NOW() WHERE id = $1',
+      [inputData.taskId],
+    );
 
     return { result: response.text ?? '' };
   },

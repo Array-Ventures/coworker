@@ -1,4 +1,4 @@
-import { db } from './db';
+import { pool } from './db';
 import { MCPClient } from '@mastra/mcp';
 import crypto from 'crypto';
 
@@ -29,28 +29,28 @@ Update working memory when you learn something worth remembering. You don't need
 
 export class AgentConfigManager {
   async get(key: string): Promise<string | null> {
-    const result = await db.execute({
-      sql: 'SELECT value FROM agent_config WHERE key = ?',
-      args: [key],
-    });
+    const result = await pool.query(
+      'SELECT value FROM agent_config WHERE key = $1',
+      [key],
+    );
     if (result.rows.length === 0) return null;
     return result.rows[0].value as string;
   }
 
   async set(key: string, value: string): Promise<void> {
-    await db.execute({
-      sql: `INSERT INTO agent_config (key, value, updated_at)
-            VALUES (?, ?, datetime('now'))
-            ON CONFLICT(key) DO UPDATE SET value = ?, updated_at = datetime('now')`,
-      args: [key, value, value],
-    });
+    await pool.query(
+      `INSERT INTO agent_config (key, value, updated_at)
+       VALUES ($1, $2, NOW())
+       ON CONFLICT(key) DO UPDATE SET value = $3, updated_at = NOW()`,
+      [key, value, value],
+    );
   }
 
   async delete(key: string): Promise<void> {
-    await db.execute({
-      sql: 'DELETE FROM agent_config WHERE key = ?',
-      args: [key],
-    });
+    await pool.query(
+      'DELETE FROM agent_config WHERE key = $1',
+      [key],
+    );
   }
 
   async getModel(): Promise<string> {
