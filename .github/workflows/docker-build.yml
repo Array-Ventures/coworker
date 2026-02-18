@@ -1,4 +1,4 @@
-name: Build & Deploy
+name: Build & Push Docker Image
 
 on:
   push:
@@ -44,14 +44,3 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger deployment
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.INFRA_REPO_PAT }}
-          repository: Array-Ventures/coworker-infra
-          event-type: deploy-coworker
-          client-payload: '{"sha": "${{ github.sha }}"}'
