@@ -5,7 +5,11 @@ export const DB_URL = process.env.DATABASE_URL || 'postgresql://postgres:postgre
 export const pool = new pg.Pool({ connectionString: DB_URL });
 
 export async function initCustomTables() {
-  await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
+  try {
+    await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
+  } catch (err) {
+    console.warn('[db] pgvector extension not available — semantic memory will fail until installed');
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS scheduled_tasks (
