@@ -30,20 +30,8 @@ const BRAIN_REGIONS = [
   { section: 'org' as const, field: 'preferences', title: 'Preferences', icon: 'tune', color: '#64748B', sub: 'Code review, PRs, and conventions' },
 ] as const
 
-const SEED_PREFIXES = [
-  'Nothing here yet',
-  "Haven't met",
-  "Don't know",
-  'No active projects',
-  "I don't know this organization",
-  "Haven't learned",
-  'My name is Coworker',
-  'I write the way things arrive',
-]
-
 function isRegionActive(content?: string): boolean {
-  if (!content?.trim()) return false
-  return !SEED_PREFIXES.some((prefix) => content.startsWith(prefix))
+  return !!content?.trim()
 }
 
 function getFieldValue(wm: WorkingMemory, section: 'persona' | 'org', field: string): string | undefined {
@@ -108,7 +96,7 @@ function CapacityRing({ percentage }: { percentage: number }) {
   return (
     <div className="relative" style={{ width: 96, height: 96 }}>
       <svg width={96} height={96} viewBox="0 0 96 96" className="rotate-[-90deg]">
-        <circle cx={48} cy={48} r={r} fill="none" stroke="#EDE9FE" strokeWidth={6} />
+        <circle cx={48} cy={48} r={r} fill="none" className="stroke-border" strokeWidth={6} />
         <circle
           cx={48} cy={48} r={r} fill="none"
           stroke="#8B5CF6" strokeWidth={6}
@@ -118,8 +106,8 @@ function CapacityRing({ percentage }: { percentage: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
-        <span className="font-mono text-[20px] font-bold" style={{ color: '#7C3AED' }}>{Math.round(percentage)}%</span>
-        <span className="font-secondary text-[8px] font-semibold" style={{ color: '#A78BFA', letterSpacing: 1.5 }}>CAPACITY</span>
+        <span className="font-mono text-[20px] font-bold" style={{ color: '#8B5CF6' }}>{Math.round(percentage)}%</span>
+        <span className="font-secondary text-[8px] font-semibold text-muted" style={{ letterSpacing: 1.5 }}>CAPACITY</span>
       </div>
     </div>
   )
@@ -142,7 +130,7 @@ function SubconsciousView({ data }: { data: ObservationalMemoryRecord | null }) 
   const observations = parseObservations(data.activeObservations || '')
 
   const status = data.isReflecting ? 'Reflecting' : data.isObserving ? 'Observing' : 'Idle'
-  const statusColor = data.isReflecting ? '#A855F7' : data.isObserving ? '#22C55E' : '#6B7280'
+  const statusColor = data.isReflecting ? '#A855F7' : data.isObserving ? '#22C55E' : undefined
 
   const dateStr = data.lastObservedAt
     ? new Date(data.lastObservedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -152,36 +140,36 @@ function SubconsciousView({ data }: { data: ObservationalMemoryRecord | null }) 
     <div className="max-w-[680px] mx-auto flex flex-col gap-6">
       {/* Memory Status hero card */}
       <div
-        className="flex items-center gap-8 rounded-2xl"
-        style={{ background: '#F9F7FF', border: '1px solid #EDE9FE', padding: '28px 32px' }}
+        className="flex items-center gap-8 rounded-2xl bg-card border border-border"
+        style={{ padding: '28px 32px' }}
       >
         <CapacityRing percentage={percentage} />
         <div className="flex-1 flex flex-col gap-3.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-icon" style={{ fontSize: 16, color: '#8B5CF6' }}>visibility</span>
-              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Observations</span>
+              <span className="font-secondary text-[12px] font-medium text-muted">Observations</span>
             </div>
             <span className="font-mono text-[12px] font-semibold text-foreground">{formatTokens(data.observationTokenCount)} tokens</span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-icon" style={{ fontSize: 16, color: '#F59E0B' }}>schedule</span>
-              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Pending messages</span>
+              <span className="font-secondary text-[12px] font-medium text-muted">Pending messages</span>
             </div>
             <span className="font-mono text-[12px] font-semibold text-foreground">{formatTokens(data.pendingMessageTokens)} tokens</span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="material-icon" style={{ fontSize: 16, color: '#14B8A6' }}>autorenew</span>
-              <span className="font-secondary text-[12px] font-medium" style={{ color: '#6B7280' }}>Reflections</span>
+              <span className="font-secondary text-[12px] font-medium text-muted">Reflections</span>
             </div>
             <span className="font-mono text-[12px] font-semibold text-foreground">{data.generationCount} cycles</span>
           </div>
-          <div className="w-full h-px" style={{ backgroundColor: '#EDE9FE' }} />
+          <div className="w-full h-px bg-border" />
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor }} />
-            <span className="font-secondary text-[11px] font-medium" style={{ color: '#6B7280' }}>
+            <div className={`w-2 h-2 rounded-full ${statusColor ? '' : 'bg-muted'}`} style={statusColor ? { backgroundColor: statusColor } : undefined} />
+            <span className="font-secondary text-[11px] font-medium text-muted">
               {status} — last processed {timeAgo(data.lastObservedAt)}
             </span>
           </div>
@@ -192,9 +180,9 @@ function SubconsciousView({ data }: { data: ObservationalMemoryRecord | null }) 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="material-icon" style={{ fontSize: 16, color: '#8B5CF6' }}>psychology</span>
-          <span className="font-secondary text-[11px] font-bold uppercase" style={{ color: '#6B7280', letterSpacing: 1.2 }}>Thought Stream</span>
+          <span className="font-secondary text-[11px] font-bold uppercase text-muted" style={{ letterSpacing: 1.2 }}>Thought Stream</span>
         </div>
-        <span className="font-secondary text-[11px] font-medium" style={{ color: '#A1A1AA' }}>{dateStr}</span>
+        <span className="font-secondary text-[11px] font-medium text-muted-dim">{dateStr}</span>
       </div>
 
       {/* Observation cards */}
@@ -227,7 +215,7 @@ function SubconsciousView({ data }: { data: ObservationalMemoryRecord | null }) 
         ].map((item) => (
           <div key={item.label} className="flex items-center gap-1.5">
             <div className="w-2 h-2 rounded" style={{ backgroundColor: item.color }} />
-            <span className="font-secondary text-[11px] font-medium" style={{ color: '#6B7280' }}>{item.label}</span>
+            <span className="font-secondary text-[11px] font-medium text-muted">{item.label}</span>
           </div>
         ))}
       </div>
@@ -577,8 +565,8 @@ function BrainDesigner({
 
 function StatusBadge({ label, variant }: { label: string; variant: 'success' | 'warning' | 'muted' }) {
   const styles = {
-    success: 'bg-[#DFE6E1] text-[#004D1A]',
-    warning: 'bg-[#E9E3D8] text-[#804200]',
+    success: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400',
+    warning: 'bg-amber-100 text-amber-800 dark:bg-amber-950/30 dark:text-amber-400',
     muted: 'bg-sidebar text-muted',
   }
   return (
@@ -2058,7 +2046,7 @@ function McpServerCard({
       </div>
       <p className="font-mono text-[12px] text-muted-dim truncate">{preview}</p>
       {testResult && (
-        <p className={`mt-2 font-secondary text-[12px] ${testResult.ok ? 'text-[#004D1A]' : 'text-red-500'}`}>
+        <p className={`mt-2 font-secondary text-[12px] ${testResult.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
           {testResult.ok
             ? `${testResult.tools?.length ?? 0} tool${testResult.tools?.length === 1 ? '' : 's'} available`
             : testResult.error || 'Connection failed'}
