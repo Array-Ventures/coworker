@@ -20,10 +20,10 @@ FROM oven/bun:1-debian
 
 WORKDIR /app
 
-# Install git, gh CLI, and gog CLI
+# Install git, gh CLI, gog CLI, and gosu (for entrypoint user switching)
 ARG GOG_VERSION=0.9.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git wget ca-certificates && \
+      git wget ca-certificates gosu && \
     # gh CLI via official apt repo
     mkdir -p -m 755 /etc/apt/keyrings && \
     wget -nv -O /tmp/gh-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg && \
@@ -45,20 +45,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the self-contained build output (includes its own node_modules)
 COPY --from=builder /app/.mastra/output ./
 
-# Create non-root user
+# Create non-root user with home on persistent volume
 RUN groupadd -g 1001 nodejs && \
-    useradd -m -u 1001 -g nodejs mastra
+    useradd -u 1001 -g nodejs -d /data/home -s /bin/bash mastra
 
 # Create workspace and data directories
-RUN mkdir -p /data/whatsapp-auth /data/gog /workspaces/shared /workspaces/coworker /workspaces/skills && \
+RUN mkdir -p /data/home /data/whatsapp-auth /data/gog /workspaces/shared /workspaces/coworker /workspaces/skills && \
     chown -R mastra:nodejs /app /data /workspaces
 
-USER mastra
+# Entrypoint: fix volume ownership (mounted as root), then drop to mastra user
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV NODE_ENV=production
-ENV PORT=4111
+ENV PORT=8080
 ENV MASTRA_STUDIO_PATH=./studio
 
-EXPOSE 4111
+EXPOSE 8080
 
+ENTRYPOINT ["entrypoint.sh"]
 CMD ["bun", "run", "index.mjs"]
