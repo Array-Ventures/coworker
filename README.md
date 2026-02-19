@@ -27,7 +27,7 @@ Open-source AI agent built with [Mastra](https://mastra.ai). Acts as an AI team 
 
 ## Deploy to Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/coworker?referralCode=7FU369)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/coworker?referralCode=7FU369&utm_medium=integration&utm_source=template&utm_campaign=generic)
 
 One-click deploy of the Coworker server with Inngest, Postgres, Redis, and optional Tailscale private networking. After deploying, set your `MODEL` and API key (e.g. `OPENAI_API_KEY`) in the Railway service variables. See `.env.example` for all supported providers.
 
