@@ -1935,7 +1935,7 @@ function McpServerForm({
       {/* Test result */}
       {testResult && (
         <div className={`mb-4 rounded-lg px-3 py-2 font-secondary text-[13px] ${
-          testResult.ok ? 'bg-[#DFE6E1] text-[#004D1A]' : 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+          testResult.ok ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400' : 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
         }`}>
           {testResult.ok ? (
             <span>Connected — {testResult.tools?.length ?? 0} tool{testResult.tools?.length === 1 ? '' : 's'} available</span>
