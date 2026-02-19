@@ -1,6 +1,7 @@
-import { memo, useState, useEffect, useCallback } from 'react'
+import { memo, useState, useCallback, useMemo } from 'react'
 import type { ScheduledTask } from '../mastra-client'
 import { useAppStore } from '../stores/useAppStore'
+import { useSliceData } from '../hooks/useSliceData'
 import PageShell from '../components/PageShell'
 import FilterTabs from '../components/FilterTabs'
 
@@ -547,12 +548,12 @@ export default memo(function ScheduledTasksPage() {
   const [view, setView] = useState<'list' | 'new' | 'edit'>('list')
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null)
 
-  const taskList = Object.values(scheduledTasks)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+  const taskList = useMemo(
+    () => Object.values(scheduledTasks).sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    [scheduledTasks],
+  )
 
-  useEffect(() => {
-    if (!tasksLoaded) loadScheduledTasks()
-  }, [tasksLoaded, loadScheduledTasks])
+  useSliceData(loadScheduledTasks)
 
   const handleCreated = useCallback(
     async (input: { name: string; scheduleConfig: any; prompt: string; notify: boolean }) => {

@@ -9,6 +9,7 @@ export function skillKey(skill: SkillShBrowseItem): string {
 
 export interface SkillsSlice {
   installedSkills: Record<string, InstalledSkillInfo>
+  skillsLoaded: boolean
   installingKey: string | null
 
   loadInstalledSkills: () => Promise<void>
@@ -16,15 +17,30 @@ export interface SkillsSlice {
   uninstallSkill: (skill: SkillShBrowseItem) => Promise<boolean>
 }
 
+let _loadSkills: Promise<void> | null = null
+
 export const createSkillsSlice: StateCreator<AppStore, [], [], SkillsSlice> = (set, get) => ({
   installedSkills: {},
+  skillsLoaded: false,
   installingKey: null,
 
   loadInstalledSkills: async () => {
-    const res = await fetchInstalledSkills()
-    const skills: Record<string, InstalledSkillInfo> = {}
-    for (const s of res.skills) skills[s.name] = s
-    set({ installedSkills: skills })
+    const fetcher = async () => {
+      const res = await fetchInstalledSkills()
+      const skills: Record<string, InstalledSkillInfo> = {}
+      for (const s of res.skills) skills[s.name] = s
+      set({ installedSkills: skills })
+    }
+
+    if (get().skillsLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadSkills) {
+      _loadSkills = fetcher()
+        .then(() => set({ skillsLoaded: true }))
+        .catch(() => set({ skillsLoaded: true }))
+        .finally(() => { _loadSkills = null })
+    }
+    return _loadSkills
   },
 
   installSkill: async (skill) => {

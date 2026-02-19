@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
-import type { StorageThreadType } from '@mastra/core/memory'
+import { useState, useCallback, useMemo, memo } from 'react'
 import { useAppStore } from '../stores/useAppStore'
-import { fetchThreads } from '../mastra-client'
+import { useSliceData } from '../hooks/useSliceData'
 
 type ThreadSwitcherProps = {
   onClose: () => void
@@ -9,34 +8,16 @@ type ThreadSwitcherProps = {
 
 export default memo(function ThreadSwitcher({ onClose }: ThreadSwitcherProps) {
   const threadId = useAppStore((s) => s.threadId)
+  const threads = useAppStore((s) => s.threads)
+  const threadsLoaded = useAppStore((s) => s.threadsLoaded)
+  const loadThreads = useAppStore((s) => s.loadThreads)
   const openThread = useAppStore((s) => s.openThread)
   const navigate = useAppStore((s) => s.navigate)
   const deleteThread = useAppStore((s) => s.deleteThread)
 
-  const [threads, setThreads] = useState<StorageThreadType[]>([])
-  const [loading, setLoading] = useState(true)
-  const [search, setSearch] = useState('')
+  useSliceData(loadThreads)
 
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const result = await fetchThreads()
-        if (cancelled) return
-        const sorted = [...result].sort(
-          (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-        )
-        setThreads(sorted as StorageThreadType[])
-      } catch (err) {
-        console.error('Failed to load threads:', err)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  const [search, setSearch] = useState('')
 
   const filtered = useMemo(
     () =>
@@ -59,7 +40,6 @@ export default memo(function ThreadSwitcher({ onClose }: ThreadSwitcherProps) {
   const handleDelete = useCallback(
     (e: React.MouseEvent, id: string) => {
       e.stopPropagation()
-      setThreads((prev) => prev.filter((t) => t.id !== id))
       deleteThread(id)
     },
     [deleteThread],
@@ -93,7 +73,7 @@ export default memo(function ThreadSwitcher({ onClose }: ThreadSwitcherProps) {
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto py-1">
-          {loading ? (
+          {!threadsLoaded ? (
             <div className="text-muted text-[13px] text-center py-6 font-secondary">
               Loading...
             </div>

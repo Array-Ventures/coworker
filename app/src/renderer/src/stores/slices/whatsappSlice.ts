@@ -30,6 +30,8 @@ export interface WhatsAppSlice {
   waPair: (code: string) => Promise<{ ok: boolean; error?: string }>
 }
 
+let _loadWa: Promise<void> | null = null
+
 export const createWhatsAppSlice: StateCreator<AppStore, [], [], WhatsAppSlice> = (set, get) => ({
   waStatus: { status: 'disconnected', qrDataUrl: null, connectedPhone: null },
   waAllowlist: [],
@@ -37,12 +39,20 @@ export const createWhatsAppSlice: StateCreator<AppStore, [], [], WhatsAppSlice> 
   waPollingTimer: null,
 
   loadWhatsAppStatus: async () => {
-    try {
+    const fetcher = async () => {
       const status = await fetchWhatsAppStatus()
-      set({ waStatus: status, waLoaded: true })
-    } catch {
-      set({ waLoaded: true })
+      set({ waStatus: status })
     }
+
+    if (get().waLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadWa) {
+      _loadWa = fetcher()
+        .then(() => set({ waLoaded: true }))
+        .catch(() => set({ waLoaded: true }))
+        .finally(() => { _loadWa = null })
+    }
+    return _loadWa
   },
 
   startWaPolling: () => {

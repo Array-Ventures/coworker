@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useMemo, memo } from 'react'
+import { useState, useMemo, useCallback, memo } from 'react'
 import type { StorageThreadType } from '@mastra/core/memory'
 import { useAppStore } from '../stores/useAppStore'
+import { useSliceData } from '../hooks/useSliceData'
 import PageShell from '../components/PageShell'
 import FilterTabs from '../components/FilterTabs'
 import NewChatButton from '../components/NewChatButton'
-import { fetchThreads } from '../mastra-client'
 
 const filterOptions = [
   { label: 'All', icon: 'list' },
@@ -16,33 +16,16 @@ const filterOptions = [
 ]
 
 export default memo(function ChatsListPage() {
-  const refreshKey = useAppStore((s) => s.refreshKey)
+  const threads = useAppStore((s) => s.threads)
+  const threadsLoaded = useAppStore((s) => s.threadsLoaded)
+  const loadThreads = useAppStore((s) => s.loadThreads)
   const openThread = useAppStore((s) => s.openThread)
   const deleteThread = useAppStore((s) => s.deleteThread)
 
-  const [threads, setThreads] = useState<StorageThreadType[]>([])
-  const [loading, setLoading] = useState(true)
+  useSliceData(loadThreads)
+
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
-
-  const loadThreads = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await fetchThreads()
-      const sorted = [...result].sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )
-      setThreads(sorted as StorageThreadType[])
-    } catch (err) {
-      console.error('Failed to load threads:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    loadThreads()
-  }, [loadThreads, refreshKey])
 
   const filtered = useMemo(() => {
     const channelPrefixes: Record<string, string[]> = {
@@ -104,7 +87,7 @@ export default memo(function ChatsListPage() {
           />
         </div>
         <div className="flex-1 overflow-y-auto px-6 pb-4">
-          {loading ? (
+          {!threadsLoaded ? (
             <div className="text-muted text-sm text-center py-12">Loading conversations...</div>
           ) : filtered.length === 0 ? (
             <div className="text-muted text-sm text-center py-12">No conversations yet</div>

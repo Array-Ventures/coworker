@@ -595,23 +595,23 @@ export interface ExposedMcpServerInfo {
 export async function fetchExposedMcpServers(): Promise<ExposedMcpServerInfo[]> {
   const res = await fetch(`${MASTRA_BASE_URL}/api/mcp/v0/servers`)
   const data = await res.json()
-  const servers: ExposedMcpServerInfo[] = []
-  for (const srv of data.servers || []) {
-    try {
-      const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`)
-      const toolsData = await toolsRes.json()
-      const toolsList = Array.isArray(toolsData.tools)
-        ? toolsData.tools.map((t: any) => ({ name: t.name || t.id, description: t.description }))
-        : Object.entries(toolsData.tools || {}).map(([name, t]: [string, any]) => ({
-            name,
-            description: (t as any)?.description,
-          }))
-      servers.push({ ...srv, tools: toolsList })
-    } catch {
-      servers.push({ ...srv, tools: [] })
-    }
-  }
-  return servers
+  return Promise.all(
+    (data.servers || []).map(async (srv: any) => {
+      try {
+        const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`)
+        const toolsData = await toolsRes.json()
+        const toolsList = Array.isArray(toolsData.tools)
+          ? toolsData.tools.map((t: any) => ({ name: t.name || t.id, description: t.description }))
+          : Object.entries(toolsData.tools || {}).map(([name, t]: [string, any]) => ({
+              name,
+              description: (t as any)?.description,
+            }))
+        return { ...srv, tools: toolsList }
+      } catch {
+        return { ...srv, tools: [] }
+      }
+    }),
+  )
 }
 
 // ── API Keys & A2A ──

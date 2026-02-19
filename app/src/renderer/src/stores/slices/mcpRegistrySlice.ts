@@ -73,6 +73,8 @@ export interface McpRegistrySlice {
   addRegistryMcp: (item: McpRegistryItem, configOverrides?: Partial<McpServerConfig>) => Promise<boolean>
 }
 
+let _loadRegistry: Promise<void> | null = null
+
 export const createMcpRegistrySlice: StateCreator<AppStore, [], [], McpRegistrySlice> = (
   set,
   get,
@@ -85,19 +87,27 @@ export const createMcpRegistrySlice: StateCreator<AppStore, [], [], McpRegistryS
   registryAddingKey: null,
 
   loadRegistryMcps: async () => {
-    set({ registryLoading: true })
-    try {
+    const fetcher = async () => {
       const res = await fetchRegistryMcps(20)
       set({
         registryMcps: res.servers,
         registryNextCursor: res.metadata.nextCursor || null,
-        registryLoaded: true,
       })
-    } catch {
-      set({ registryLoaded: true })
-    } finally {
-      set({ registryLoading: false })
     }
+
+    if (get().registryLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadRegistry) {
+      set({ registryLoading: true })
+      _loadRegistry = fetcher()
+        .then(() => set({ registryLoaded: true }))
+        .catch(() => set({ registryLoaded: true }))
+        .finally(() => {
+          set({ registryLoading: false })
+          _loadRegistry = null
+        })
+    }
+    return _loadRegistry
   },
 
   loadMoreRegistryMcps: async () => {

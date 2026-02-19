@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, memo, useRef } from 'react'
 import type { ThemeMode } from '../hooks/useTheme'
 import { useAppStore } from '../stores/useAppStore'
+import { useSliceData } from '../hooks/useSliceData'
 import PageShell from '../components/PageShell'
 import FilterTabs from '../components/FilterTabs'
-import { fetchExposedMcpServers } from '../mastra-client'
 import type { McpServerConfig, ApiKeyEntry, ExposedMcpServerInfo, WorkingMemory, ObservationalMemoryRecord } from '../mastra-client'
+import { MASTRA_BASE_URL, setMastraBaseUrl } from '../mastra-client'
 
 import type { AgentConfigState, Provider } from '../stores/slices/brainSlice'
 
@@ -601,12 +602,8 @@ function WhatsAppSection() {
   const [pairingError, setPairingError] = useState('')
   const prevStatusRef = useRef(waStatus.status)
 
-  useEffect(() => {
-    if (!waLoaded) {
-      loadWhatsAppStatus()
-      loadWaAllowlist()
-    }
-  }, [waLoaded, loadWhatsAppStatus, loadWaAllowlist])
+  useSliceData(loadWhatsAppStatus)
+  useSliceData(loadWaAllowlist)
 
   // Manage polling: stop when connected, start for transient states (connecting, qr_ready, logged_out)
   useEffect(() => {
@@ -617,6 +614,7 @@ function WhatsAppSection() {
     } else if (waStatus.status !== 'connected' && waStatus.status !== 'disconnected') {
       startWaPolling()
     }
+    return () => stopWaPolling()
   }, [waStatus.status, stopWaPolling, startWaPolling])
 
   const handleConnect = async () => {
@@ -881,9 +879,7 @@ function EmailSection() {
     })
   }
 
-  useEffect(() => {
-    if (!gogLoaded) loadGogStatus()
-  }, [gogLoaded, loadGogStatus])
+  useSliceData(loadGogStatus)
 
   const handleStartAuth = async () => {
     const email = newEmail.trim()
@@ -1235,9 +1231,7 @@ function GitHubSection() {
   const [disconnecting, setDisconnecting] = useState(false)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
-    if (!ghLoaded) loadGhStatus()
-  }, [ghLoaded, loadGhStatus])
+  useSliceData(loadGhStatus)
 
   // Poll for auth completion when auth is in progress
   useEffect(() => {
@@ -1458,8 +1452,6 @@ function GitHubSection() {
 
 /* ── A2A / API Access ── */
 
-import { MASTRA_BASE_URL, setMastraBaseUrl } from '../mastra-client'
-
 function CopyButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
@@ -1633,9 +1625,7 @@ function ApiKeysSection() {
   const [newKey, setNewKey] = useState<{ entry: ApiKeyEntry; fullKey: string } | null>(null)
   const [generating, setGenerating] = useState(false)
 
-  useEffect(() => {
-    if (!a2aLoaded) loadA2aData()
-  }, [a2aLoaded, loadA2aData])
+  useSliceData(loadA2aData)
 
   const handleGenerate = async () => {
     setGenerating(true)
@@ -2057,15 +2047,12 @@ function McpServerCard({
 }
 
 function ExposedMcpSection() {
-  const [servers, setServers] = useState<ExposedMcpServerInfo[]>([])
-  const [loaded, setLoaded] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const servers = useAppStore((s) => s.exposedMcpServers)
+  const loaded = useAppStore((s) => s.exposedMcpLoaded)
+  const loadExposedMcpServers = useAppStore((s) => s.loadExposedMcpServers)
+  useSliceData(loadExposedMcpServers)
 
-  useEffect(() => {
-    fetchExposedMcpServers()
-      .then((s) => { setServers(s); setLoaded(true) })
-      .catch(() => setLoaded(true))
-  }, [])
+  const [copied, setCopied] = useState(false)
 
   if (!loaded || servers.length === 0) return null
 
@@ -2159,9 +2146,7 @@ function McpServersSection() {
 
   const [editing, setEditing] = useState<string | 'new' | null>(null)
 
-  useEffect(() => {
-    if (!mcpLoaded) loadMcpServers()
-  }, [mcpLoaded, loadMcpServers])
+  useSliceData(loadMcpServers)
 
   const handleSave = async (server: McpServerConfig) => {
     const existing = mcpServers.find((s) => s.id === server.id)
@@ -2412,12 +2397,18 @@ export default memo(function SettingsPage({
 }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState('AI')
 
-  // Brain (AI) state from Zustand
-  const { workingMemory, agentConfig, providers, brainLoaded, loadBrain, updateBrainField, updateModel, observationalMemory, loadObservationalMemory } = useAppStore()
+  // Brain (AI) state from Zustand — individual selectors to avoid full-store re-renders
+  const workingMemory = useAppStore((s) => s.workingMemory)
+  const agentConfig = useAppStore((s) => s.agentConfig)
+  const providers = useAppStore((s) => s.providers)
+  const brainLoaded = useAppStore((s) => s.brainLoaded)
+  const loadBrain = useAppStore((s) => s.loadBrain)
+  const updateBrainField = useAppStore((s) => s.updateBrainField)
+  const updateModel = useAppStore((s) => s.updateModel)
+  const observationalMemory = useAppStore((s) => s.observationalMemory)
+  const loadObservationalMemory = useAppStore((s) => s.loadObservationalMemory)
 
-  useEffect(() => {
-    if (activeTab === 'AI' && !brainLoaded) loadBrain()
-  }, [activeTab, brainLoaded, loadBrain])
+  useSliceData(loadBrain)
 
   return (
     <PageShell>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { useSliceData } from '../hooks/useSliceData'
 import type { SkillShBrowseItem, McpRegistryItem, McpServerConfig } from '../mastra-client'
 import { fetchPopularSkills, searchSkillsSh } from '../mastra-client'
 import { useAppStore } from '../stores/useAppStore'
@@ -412,10 +413,8 @@ export default memo(function SuperpowersPage() {
     Object.keys(installedSkills).length + mcpServers.length
 
   // ── Load on mount ──
-  useEffect(() => {
-    loadInstalledSkills()
-    if (!mcpLoaded) loadMcpServers()
-  }, [loadInstalledSkills, mcpLoaded, loadMcpServers])
+  useSliceData(loadInstalledSkills)
+  useSliceData(loadMcpServers)
 
   // ── Load skills browse ──
   useEffect(() => {

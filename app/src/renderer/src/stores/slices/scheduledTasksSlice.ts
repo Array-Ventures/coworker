@@ -28,6 +28,8 @@ export interface ScheduledTasksSlice {
   toggleTask: (id: string, enabled: boolean) => Promise<boolean>
 }
 
+let _loadTasks: Promise<void> | null = null
+
 export const createScheduledTasksSlice: StateCreator<AppStore, [], [], ScheduledTasksSlice> = (
   set,
   get,
@@ -36,10 +38,22 @@ export const createScheduledTasksSlice: StateCreator<AppStore, [], [], Scheduled
   tasksLoaded: false,
 
   loadScheduledTasks: async () => {
-    const items = await fetchScheduledTasks()
-    const record: Record<string, ScheduledTask> = {}
-    for (const t of items) record[t.id] = t
-    set({ scheduledTasks: record, tasksLoaded: true })
+    const fetcher = async () => {
+      const items = await fetchScheduledTasks()
+      const record: Record<string, ScheduledTask> = {}
+      for (const t of items) record[t.id] = t
+      set({ scheduledTasks: record })
+    }
+
+    if (get().tasksLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadTasks) {
+      _loadTasks = fetcher()
+        .then(() => set({ tasksLoaded: true }))
+        .catch(() => set({ tasksLoaded: true }))
+        .finally(() => { _loadTasks = null })
+    }
+    return _loadTasks
   },
 
   createTask: async (input) => {

@@ -33,6 +33,8 @@ export interface BrainSlice {
   loadObservationalMemory: () => Promise<void>
 }
 
+let _loadBrain: Promise<void> | null = null
+
 export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set, get) => ({
   workingMemory: {},
   agentConfig: null,
@@ -42,7 +44,7 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
   observationalMemory: null,
 
   loadBrain: async () => {
-    try {
+    const fetcher = async () => {
       const [wm, config, providerList] = await Promise.all([
         fetchWorkingMemory(),
         fetchAgentConfig(),
@@ -59,11 +61,18 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           if (a.connected !== b.connected) return a.connected ? -1 : 1
           return a.name.localeCompare(b.name)
         }),
-        brainLoaded: true,
       })
-    } catch {
-      set({ brainLoaded: true })
     }
+
+    if (get().brainLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadBrain) {
+      _loadBrain = fetcher()
+        .then(() => set({ brainLoaded: true }))
+        .catch(() => set({ brainLoaded: true }))
+        .finally(() => { _loadBrain = null })
+    }
+    return _loadBrain
   },
 
   updateBrainField: async (section, field, value) => {

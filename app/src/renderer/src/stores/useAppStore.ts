@@ -14,8 +14,9 @@ import { type A2aSlice, createA2aSlice } from './slices/a2aSlice'
 import { type GogSlice, createGogSlice } from './slices/gogSlice'
 import { type GhSlice, createGhSlice } from './slices/ghSlice'
 import { type BrainSlice, createBrainSlice } from './slices/brainSlice'
+import { type ThreadsSlice, createThreadsSlice } from './slices/threadsSlice'
 
-export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & GhSlice & BrainSlice
+export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & GhSlice & BrainSlice & ThreadsSlice
 
 export const useAppStore = create<AppStore>()((...a) => ({
   ...createUISlice(...a),
@@ -30,4 +31,5 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createGogSlice(...a),
   ...createGhSlice(...a),
   ...createBrainSlice(...a),
+  ...createThreadsSlice(...a),
 }))

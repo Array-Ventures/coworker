@@ -24,6 +24,8 @@ export interface GhSlice {
   ghClearAuth: () => void
 }
 
+let _loadGh: Promise<void> | null = null
+
 export const createGhSlice: StateCreator<AppStore, [], [], GhSlice> = (set, get) => ({
   ghInstalled: false,
   ghLoggedIn: false,
@@ -35,12 +37,20 @@ export const createGhSlice: StateCreator<AppStore, [], [], GhSlice> = (set, get)
   ghAuthError: null,
 
   loadGhStatus: async () => {
-    try {
+    const fetcher = async () => {
       const { installed, loggedIn, username } = await fetchGhStatus()
-      set({ ghInstalled: installed, ghLoggedIn: loggedIn, ghUsername: username || null, ghLoaded: true })
-    } catch {
-      set({ ghLoaded: true })
+      set({ ghInstalled: installed, ghLoggedIn: loggedIn, ghUsername: username || null })
     }
+
+    if (get().ghLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadGh) {
+      _loadGh = fetcher()
+        .then(() => set({ ghLoaded: true }))
+        .catch(() => set({ ghLoaded: true }))
+        .finally(() => { _loadGh = null })
+    }
+    return _loadGh
   },
 
   ghStartLogin: async () => {

@@ -18,18 +18,28 @@ export interface A2aSlice {
   removeApiKey: (id: string) => Promise<void>
 }
 
+let _loadA2a: Promise<void> | null = null
+
 export const createA2aSlice: StateCreator<AppStore, [], [], A2aSlice> = (set, get) => ({
   apiKeys: [],
   a2aInfo: null,
   a2aLoaded: false,
 
   loadA2aData: async () => {
-    try {
+    const fetcher = async () => {
       const [keys, info] = await Promise.all([fetchApiKeys(), fetchA2aInfo()])
-      set({ apiKeys: keys, a2aInfo: info, a2aLoaded: true })
-    } catch {
-      set({ a2aLoaded: true })
+      set({ apiKeys: keys, a2aInfo: info })
     }
+
+    if (get().a2aLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadA2a) {
+      _loadA2a = fetcher()
+        .then(() => set({ a2aLoaded: true }))
+        .catch(() => set({ a2aLoaded: true }))
+        .finally(() => { _loadA2a = null })
+    }
+    return _loadA2a
   },
 
   addApiKey: async (label) => {

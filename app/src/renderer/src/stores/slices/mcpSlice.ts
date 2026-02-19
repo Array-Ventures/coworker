@@ -1,13 +1,16 @@
 import type { StateCreator } from 'zustand'
 import type { AppStore } from '../useAppStore'
-import type { McpServerConfig } from '../../mastra-client'
-import { fetchMcpServers, saveMcpServers, testMcpServer } from '../../mastra-client'
+import type { McpServerConfig, ExposedMcpServerInfo } from '../../mastra-client'
+import { fetchMcpServers, saveMcpServers, testMcpServer, fetchExposedMcpServers } from '../../mastra-client'
 
 export interface McpSlice {
   mcpServers: McpServerConfig[]
   mcpLoaded: boolean
+  exposedMcpServers: ExposedMcpServerInfo[]
+  exposedMcpLoaded: boolean
 
   loadMcpServers: () => Promise<void>
+  loadExposedMcpServers: () => Promise<void>
   addMcpServer: (server: McpServerConfig) => Promise<void>
   updateMcpServer: (server: McpServerConfig) => Promise<void>
   deleteMcpServer: (id: string) => Promise<void>
@@ -17,17 +20,47 @@ export interface McpSlice {
   ) => Promise<{ ok: boolean; tools?: string[]; error?: string }>
 }
 
+let _loadMcp: Promise<void> | null = null
+let _loadExposedMcp: Promise<void> | null = null
+
 export const createMcpSlice: StateCreator<AppStore, [], [], McpSlice> = (set, get) => ({
   mcpServers: [],
   mcpLoaded: false,
+  exposedMcpServers: [],
+  exposedMcpLoaded: false,
 
   loadMcpServers: async () => {
-    try {
+    const fetcher = async () => {
       const servers = await fetchMcpServers()
-      set({ mcpServers: servers, mcpLoaded: true })
-    } catch {
-      set({ mcpLoaded: true })
+      set({ mcpServers: servers })
     }
+
+    if (get().mcpLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadMcp) {
+      _loadMcp = fetcher()
+        .then(() => set({ mcpLoaded: true }))
+        .catch(() => set({ mcpLoaded: true }))
+        .finally(() => { _loadMcp = null })
+    }
+    return _loadMcp
+  },
+
+  loadExposedMcpServers: async () => {
+    const fetcher = async () => {
+      const servers = await fetchExposedMcpServers()
+      set({ exposedMcpServers: servers })
+    }
+
+    if (get().exposedMcpLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadExposedMcp) {
+      _loadExposedMcp = fetcher()
+        .then(() => set({ exposedMcpLoaded: true }))
+        .catch(() => set({ exposedMcpLoaded: true }))
+        .finally(() => { _loadExposedMcp = null })
+    }
+    return _loadExposedMcp
   },
 
   addMcpServer: async (server) => {

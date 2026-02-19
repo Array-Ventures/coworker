@@ -36,13 +36,11 @@ export interface ChatSlice {
   switchingThread: boolean
   input: string
   stagedFiles: FileUIPart[]
-  refreshKey: number
   pendingLoad: { messages: UIMessage[]; title: string } | null
 
   // Setters
   setInput: (value: string) => void
   setThreadTitle: (title: string | undefined) => void
-  bumpRefreshKey: () => void
   addFiles: (files: FileUIPart[]) => void
   removeFile: (index: number) => void
   clearFiles: () => void
@@ -62,12 +60,10 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
   switchingThread: false,
   input: '',
   stagedFiles: [],
-  refreshKey: 0,
   pendingLoad: null,
 
   setInput: (value) => set({ input: value }),
   setThreadTitle: (title) => set({ threadTitle: title }),
-  bumpRefreshKey: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
   addFiles: (files) => set((s) => ({ stagedFiles: [...s.stagedFiles, ...files] })),
   removeFile: (index) => set((s) => ({ stagedFiles: s.stagedFiles.filter((_, i) => i !== index) })),
   clearFiles: () => set({ stagedFiles: [] }),
@@ -99,7 +95,10 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
 
     try {
       const t = await fetchThread(threadId)
-      if (t.title) set({ threadTitle: t.title })
+      if (t.title) {
+        set({ threadTitle: t.title })
+        get().updateThreadInList(threadId, { title: t.title } as any)
+      }
     } catch {
       // Thread may not exist yet on first message — title will appear on next refresh
     }
@@ -112,22 +111,24 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     set({ threadTitle: trimmed })
     try {
       await updateThreadTitle(threadId, trimmed)
-      get().bumpRefreshKey()
+      get().updateThreadInList(threadId, { title: trimmed } as any)
     } catch (err) {
       console.error('Failed to update thread title:', err)
     }
   },
 
   deleteThread: async (deleteThreadId) => {
-    const { threadId } = get()
+    const { threadId, threads } = get()
+    const prevThreads = threads
+    get().removeThread(deleteThreadId)
+    if (deleteThreadId === threadId) {
+      set({ threadId: null, threadTitle: undefined, currentPage: 'home', pendingLoad: null })
+    }
     try {
       await deleteThreadApi(deleteThreadId)
     } catch (err) {
       console.error('Failed to delete thread:', err)
+      set({ threads: prevThreads })
     }
-    if (deleteThreadId === threadId) {
-      set({ threadId: null, threadTitle: undefined, currentPage: 'home', pendingLoad: null })
-    }
-    get().bumpRefreshKey()
   },
 })

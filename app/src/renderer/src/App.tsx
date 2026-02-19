@@ -46,11 +46,9 @@ export default function App() {
     [],
   )
 
-  // ── On finish: bump thread list + fetch updated title ──
+  // ── On finish: refresh title (propagates to threads list via updateThreadInList) ──
   const handleFinish = useCallback(() => {
-    const s = useAppStore.getState()
-    s.bumpRefreshKey()
-    s.refreshThreadTitle()
+    useAppStore.getState().refreshThreadTitle()
   }, [])
 
   // ── AI SDK chat hook — id prop gives each thread its own Chat instance ──

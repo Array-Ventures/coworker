@@ -25,6 +25,8 @@ export interface GogSlice {
   gogClearAuth: () => void
 }
 
+let _loadGog: Promise<void> | null = null
+
 export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, get) => ({
   gogInstalled: false,
   gogAccounts: [],
@@ -34,12 +36,20 @@ export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, ge
   gogAuthError: null,
 
   loadGogStatus: async () => {
-    try {
+    const fetcher = async () => {
       const { installed, accounts } = await fetchGogStatus()
-      set({ gogInstalled: installed, gogAccounts: accounts, gogLoaded: true })
-    } catch {
-      set({ gogLoaded: true })
+      set({ gogInstalled: installed, gogAccounts: accounts })
     }
+
+    if (get().gogLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadGog) {
+      _loadGog = fetcher()
+        .then(() => set({ gogLoaded: true }))
+        .catch(() => set({ gogLoaded: true }))
+        .finally(() => { _loadGog = null })
+    }
+    return _loadGog
   },
 
   gogStartAuth: async (email, services) => {
@@ -57,7 +67,7 @@ export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, ge
     try {
       const result = await apiCompleteGogAuth(email, redirectUrl, services)
       if (result.ok) {
-        set({ gogAuthUrl: null, gogAuthEmail: null, gogAuthError: null })
+        set({ gogAuthUrl: null, gogAuthEmail: null, gogAuthError: null, gogLoaded: false })
         await get().loadGogStatus()
       } else {
         set({ gogAuthError: result.error || 'Authorization failed' })
@@ -73,6 +83,7 @@ export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, ge
 
   gogRemoveAccount: async (email) => {
     await apiRemoveGogAccount(email)
+    set({ gogLoaded: false })
     await get().loadGogStatus()
   },
 
