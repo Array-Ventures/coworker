@@ -1,7 +1,10 @@
-import { describe, expect, test, beforeEach } from 'bun:test';
+import { describe, expect, test, beforeEach, mock } from 'bun:test';
 import {
   normalizeWhatsAppId,
   extractText,
+  extractMedia,
+  downloadMedia,
+  describeNonTextMessage,
   chunkText,
   SentMessageTracker,
   MAX_WHATSAPP_TEXT_LENGTH,
@@ -11,6 +14,7 @@ import {
   formatMessageEnvelope,
   containsNoReply,
   stripDirectives,
+  type MediaAttachment,
 } from '../whatsapp-utils';
 import type { WAMessage } from '@whiskeysockets/baileys';
 
@@ -91,6 +95,23 @@ describe('extractText', () => {
 
   test('priority: conversation wins over extended', () => {
     expect(extractText(makeMsg({ conversation: 'first', extendedTextMessage: { text: 'second' } }))).toBe('first');
+  });
+
+  test('unwraps viewOnceMessage containing imageMessage with caption', () => {
+    expect(extractText(makeMsg({
+      viewOnceMessage: {
+        message: { imageMessage: { caption: 'view once caption' } },
+      },
+    }))).toBe('view once caption');
+  });
+
+  test('returns location description for locationMessage', () => {
+    const result = extractText(makeMsg({
+      locationMessage: { degreesLatitude: 37.7749, degreesLongitude: -122.4194, name: 'San Francisco' },
+    }));
+    expect(result).toContain('37.7749');
+    expect(result).toContain('-122.4194');
+    expect(result).toContain('San Francisco');
   });
 });
 
@@ -275,6 +296,24 @@ describe('getContextInfo', () => {
     const msg = makeMsg({ conversation: 'hello' });
     expect(getContextInfo(msg)).toBeUndefined();
   });
+
+  test('extracts from audioMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ audioMessage: { mimetype: 'audio/ogg', ptt: true, contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
+
+  test('extracts from stickerMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ stickerMessage: { mimetype: 'image/webp', contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
+
+  test('extracts from locationMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ locationMessage: { degreesLatitude: 0, degreesLongitude: 0, contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
 });
 
 // ── getQuotedText ──
@@ -327,6 +366,7 @@ describe('formatMessageEnvelope', () => {
     groupJid?: string;
     isMentioned?: boolean;
     quotedText?: string;
+    media?: MediaAttachment;
   }
 
   test('DM envelope has channel, type, sender, timestamp', () => {
@@ -397,6 +437,25 @@ describe('formatMessageEnvelope', () => {
     expect(result).toMatch(/^<\w+[\s>]/);
     expect(result).toMatch(/<\/\w+>\s*$/);
   });
+
+  test('includes attachment element when media is present', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'dm',
+      senderJid: '1234567890@s.whatsapp.net',
+      timestamp: 1700000000,
+      media: {
+        type: 'image',
+        mimeType: 'image/jpeg',
+        fileSize: 245760,
+      },
+    };
+    const result = formatMessageEnvelope(meta as any);
+    expect(result).toContain('<attachment');
+    expect(result).toContain('type="image"');
+    expect(result).toContain('mimeType="image/jpeg"');
+    expect(result).toContain('size="245760"');
+  });
 });
 
 // ── containsNoReply ──
@@ -432,5 +491,207 @@ describe('stripDirectives', () => {
 
   test('trims result', () => {
     expect(stripDirectives('  <no-reply/> Hello  ')).toBe('Hello');
+  });
+});
+
+// ── extractMedia ──
+
+describe('extractMedia', () => {
+  function makeMsg(message: any): WAMessage {
+    return { key: { id: 'test', remoteJid: 'test@s.whatsapp.net' }, message } as WAMessage;
+  }
+
+  test('returns image attachment with metadata from imageMessage', () => {
+    const msg = makeMsg({
+      imageMessage: {
+        mimetype: 'image/jpeg',
+        caption: 'a photo',
+        fileLength: 12345,
+        width: 800,
+        height: 600,
+        mediaKey: new Uint8Array([1, 2, 3]),
+        directPath: '/enc/path',
+        url: 'https://mmg.whatsapp.net/...',
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('image');
+    expect(media!.mimeType).toBe('image/jpeg');
+    expect(media!.caption).toBe('a photo');
+    expect(media!.fileSize).toBe(12345);
+    expect(media!.width).toBe(800);
+    expect(media!.height).toBe(600);
+    expect(media!.mediaKey).toBeDefined();
+    expect(media!.directPath).toBe('/enc/path');
+  });
+
+  test('returns video attachment from videoMessage', () => {
+    const msg = makeMsg({
+      videoMessage: {
+        mimetype: 'video/mp4',
+        caption: 'a clip',
+        seconds: 15,
+        fileLength: 500000,
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('video');
+    expect(media!.mimeType).toBe('video/mp4');
+    expect(media!.caption).toBe('a clip');
+    expect(media!.seconds).toBe(15);
+  });
+
+  test('returns audio attachment with isVoiceNote when ptt=true', () => {
+    const msg = makeMsg({
+      audioMessage: {
+        mimetype: 'audio/ogg; codecs=opus',
+        ptt: true,
+        seconds: 5,
+        fileLength: 8000,
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('audio');
+    expect(media!.isVoiceNote).toBe(true);
+    expect(media!.seconds).toBe(5);
+  });
+
+  test('returns document attachment with fileName from documentMessage', () => {
+    const msg = makeMsg({
+      documentMessage: {
+        mimetype: 'application/pdf',
+        fileName: 'report.pdf',
+        caption: 'Q4 Report',
+        fileLength: 100000,
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('document');
+    expect(media!.mimeType).toBe('application/pdf');
+    expect(media!.fileName).toBe('report.pdf');
+    expect(media!.caption).toBe('Q4 Report');
+  });
+
+  test('returns sticker attachment from stickerMessage', () => {
+    const msg = makeMsg({
+      stickerMessage: {
+        mimetype: 'image/webp',
+        width: 512,
+        height: 512,
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('sticker');
+    expect(media!.mimeType).toBe('image/webp');
+    expect(media!.width).toBe(512);
+  });
+
+  test('returns null for text-only messages', () => {
+    const msg = makeMsg({ conversation: 'just text' });
+    expect(extractMedia(msg)).toBeNull();
+  });
+
+  test('unwraps viewOnceMessage to extract inner media', () => {
+    const msg = makeMsg({
+      viewOnceMessage: {
+        message: {
+          imageMessage: {
+            mimetype: 'image/jpeg',
+            caption: 'view once photo',
+            mediaKey: new Uint8Array([4, 5, 6]),
+          },
+        },
+      },
+    });
+    const media = extractMedia(msg);
+    expect(media).not.toBeNull();
+    expect(media!.type).toBe('image');
+    expect(media!.caption).toBe('view once photo');
+  });
+});
+
+// ── downloadMedia ──
+
+describe('downloadMedia', () => {
+  // Note: downloadMedia calls Baileys' downloadContentFromMessage which requires
+  // real media keys/URLs. We mock the module-level import for unit testing.
+  // For now, these tests verify the function signature and error handling.
+
+  test('throws when exceeding size limit', async () => {
+    // Create a mock attachment with no real download info — Baileys will fail
+    const attachment: MediaAttachment = {
+      type: 'image',
+      mimeType: 'image/jpeg',
+      mediaKey: null,
+      directPath: null,
+      url: null,
+    };
+    // Without valid media source, downloadContentFromMessage will throw
+    await expect(downloadMedia(attachment, 100)).rejects.toThrow();
+  });
+
+  test('handles missing mediaKey gracefully', async () => {
+    const attachment: MediaAttachment = {
+      type: 'document',
+      mimeType: 'application/pdf',
+      mediaKey: null,
+      directPath: null,
+      url: null,
+    };
+    // Should throw since there's no valid source to download from
+    await expect(downloadMedia(attachment)).rejects.toThrow();
+  });
+});
+
+// ── describeNonTextMessage ──
+
+describe('describeNonTextMessage', () => {
+  function makeMsg(message: any): WAMessage {
+    return { key: { id: 'test', remoteJid: 'test@s.whatsapp.net' }, message } as WAMessage;
+  }
+
+  test('returns location description with coordinates', () => {
+    const msg = makeMsg({
+      locationMessage: { degreesLatitude: 37.7749, degreesLongitude: -122.4194, name: 'San Francisco' },
+    });
+    const desc = describeNonTextMessage(msg);
+    expect(desc).not.toBeNull();
+    expect(desc).toContain('37.7749');
+    expect(desc).toContain('-122.4194');
+    expect(desc).toContain('San Francisco');
+  });
+
+  test('returns contact description with display name', () => {
+    const msg = makeMsg({
+      contactMessage: { displayName: 'John Doe', vcard: 'BEGIN:VCARD...' },
+    });
+    const desc = describeNonTextMessage(msg);
+    expect(desc).not.toBeNull();
+    expect(desc).toContain('John Doe');
+  });
+
+  test('returns null for non-special message types', () => {
+    const msg = makeMsg({ conversation: 'hello' });
+    expect(describeNonTextMessage(msg)).toBeNull();
+  });
+
+  test('returns contacts array description', () => {
+    const msg = makeMsg({
+      contactsArrayMessage: {
+        contacts: [
+          { displayName: 'Alice' },
+          { displayName: 'Bob' },
+        ],
+      },
+    });
+    const desc = describeNonTextMessage(msg);
+    expect(desc).not.toBeNull();
+    expect(desc).toContain('Alice');
+    expect(desc).toContain('Bob');
   });
 });

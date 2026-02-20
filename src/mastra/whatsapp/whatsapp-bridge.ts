@@ -1,10 +1,16 @@
 import crypto from 'node:crypto';
+import path from 'node:path';
 import type { Mastra } from '@mastra/core/mastra';
+import { LocalFilesystem } from '@mastra/core/workspace';
 import { isJidGroup, type WAMessage } from '@whiskeysockets/baileys';
 import type { WhatsAppSocket } from './whatsapp-session';
+import type { SendOpts } from '../messaging/router';
 import {
   normalizeWhatsAppId,
   extractText,
+  extractMedia,
+  downloadMedia,
+  describeNonTextMessage,
   chunkText,
   MAX_WHATSAPP_TEXT_LENGTH,
   SentMessageTracker,
@@ -15,8 +21,14 @@ import {
   containsNoReply,
   stripDirectives,
   type MessageMetadata,
+  type MediaAttachment,
 } from './whatsapp-utils';
 import { pool as defaultPool } from '../db';
+
+// Default extensions by media type — used when Baileys doesn't provide a fileName
+const TYPE_EXT: Record<string, string> = {
+  image: 'jpg', video: 'mp4', audio: 'ogg', document: 'bin', sticker: 'webp',
+};
 
 const PAIRING_TTL_MS = 60 * 60_000; // 1 hour
 const DEBOUNCE_MS = 2000; // 2s window to collect rapid messages
@@ -41,12 +53,15 @@ export class WhatsAppBridge {
 
   // Debounce + abort state (replaces old messageQueue)
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pendingTexts = new Map<string, { phone: string; texts: string[]; replyJid: string }>();
+  private pendingTexts = new Map<string, { phone: string; texts: string[]; media: MediaAttachment[]; replyJid: string }>();
   private activeAbort = new Map<string, AbortController>();
   private processing = new Set<string>();
 
   // Group metadata cache
   private groupMetaCache = new Map<string, GroupMeta>();
+
+  // Lazy workspace filesystem for saving media
+  private workspaceFs: LocalFilesystem | null = null;
 
   // Per-message metadata for envelope building (keyed by debounce key)
   private pendingMeta = new Map<string, MessageMetadata>();
@@ -90,14 +105,37 @@ export class WhatsAppBridge {
   }
 
   /** Send a message outbound (for message router). */
-  async sendOutbound(to: string, text: string): Promise<string | undefined> {
-    const chunks = chunkText(text, MAX_WHATSAPP_TEXT_LENGTH);
+  async sendOutbound(to: string, text: string, opts?: SendOpts): Promise<string | undefined> {
     let lastMsgId: string | undefined;
-    for (const chunk of chunks) {
-      const sent = await this.socket.sendMessage(to, { text: chunk });
-      this.sentTracker.record(sent?.key?.id);
-      lastMsgId = sent?.key?.id;
+
+    // Send media first if present
+    if (opts?.media?.length) {
+      for (const item of opts.media) {
+        const source = item.data ? Buffer.from(item.data) : { url: item.url! };
+        let payload: any;
+        switch (item.type) {
+          case 'image': payload = { image: source, caption: item.caption }; break;
+          case 'video': payload = { video: source, caption: item.caption }; break;
+          case 'audio': payload = { audio: source, ptt: item.ptt ?? false }; break;
+          case 'document': payload = { document: source, mimetype: item.mimeType || 'application/octet-stream', fileName: item.fileName, caption: item.caption }; break;
+          case 'sticker': payload = { sticker: source }; break;
+        }
+        const sent = await this.socket.sendMessage(to, payload);
+        this.sentTracker.record(sent?.key?.id);
+        lastMsgId = sent?.key?.id;
+      }
     }
+
+    // Send text if present
+    if (text?.trim()) {
+      const chunks = chunkText(text, MAX_WHATSAPP_TEXT_LENGTH);
+      for (const chunk of chunks) {
+        const sent = await this.socket.sendMessage(to, { text: chunk });
+        this.sentTracker.record(sent?.key?.id);
+        lastMsgId = sent?.key?.id;
+      }
+    }
+
     return lastMsgId;
   }
 
@@ -119,8 +157,16 @@ export class WhatsAppBridge {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid) return;
 
+    // Extract all content types from the (possibly wrapped) message
     const text = extractText(msg);
-    if (!text.trim()) return;
+    const media = extractMedia(msg);
+    const nonTextDesc = describeNonTextMessage(msg);
+
+    // Skip if there's nothing to process
+    if (!text.trim() && !media && !nonTextDesc) return;
+
+    // Build the display text: combine extracted text with non-text descriptions
+    const displayText = text.trim() || nonTextDesc || '';
 
     const isGroup = isJidGroup(remoteJid);
 
@@ -150,15 +196,16 @@ export class WhatsAppBridge {
         groupJid: remoteJid,
         isMentioned: mentioned,
         quotedText,
+        media: media || undefined,
       };
 
-      console.log(`[whatsapp-bridge] group msg from ${phone} in ${groupMeta.name} (mentioned=${mentioned})`);
+      console.log(`[whatsapp-bridge] group msg from ${phone} in ${groupMeta.name} (mentioned=${mentioned}${media ? `, media=${media.type}` : ''})`);
 
-      this.bufferMessage(debounceKey, phone, text, remoteJid, meta, mentioned);
+      this.bufferMessage(debounceKey, phone, displayText, remoteJid, meta, mentioned, media || undefined);
     } else {
       // DM flow
       const phone = normalizeWhatsAppId(remoteJid);
-      console.log(`[whatsapp-bridge] incoming from raw JID: ${remoteJid} → normalized: ${phone}`);
+      console.log(`[whatsapp-bridge] incoming from raw JID: ${remoteJid} → normalized: ${phone}${media ? ` [media: ${media.type}]` : ''}`);
 
       const allowed = await this.isAllowed(remoteJid, phone);
       if (!allowed) {
@@ -171,7 +218,7 @@ export class WhatsAppBridge {
         return;
       }
 
-      console.log(`[whatsapp-bridge] allowed — ${phone}, text: "${text.slice(0, 80)}"`);
+      console.log(`[whatsapp-bridge] allowed — ${phone}, text: "${displayText.slice(0, 80)}"`);
 
       const quotedText = getQuotedText(msg);
       const meta: MessageMetadata = {
@@ -183,9 +230,10 @@ export class WhatsAppBridge {
           ? (msg as any).messageTimestamp
           : Math.floor(Date.now() / 1000),
         quotedText,
+        media: media || undefined,
       };
 
-      this.bufferMessage(remoteJid, phone, text, remoteJid, meta, false);
+      this.bufferMessage(remoteJid, phone, displayText, remoteJid, meta, false, media || undefined);
     }
   }
 
@@ -197,10 +245,12 @@ export class WhatsAppBridge {
     replyJid: string,
     meta: MessageMetadata,
     immediateFlush: boolean,
+    media?: MediaAttachment,
   ): void {
-    // Accumulate text
-    const pending = this.pendingTexts.get(debounceKey) ?? { phone, texts: [], replyJid };
-    pending.texts.push(text);
+    // Accumulate text and media
+    const pending = this.pendingTexts.get(debounceKey) ?? { phone, texts: [], media: [], replyJid };
+    if (text) pending.texts.push(text);
+    if (media) pending.media.push(media);
     this.pendingTexts.set(debounceKey, pending);
 
     // Store latest metadata (last message wins for envelope)
@@ -237,9 +287,9 @@ export class WhatsAppBridge {
     if (this.processing.has(debounceKey)) return;
 
     const pending = this.pendingTexts.get(debounceKey);
-    if (!pending?.texts.length) return;
+    if (!pending || (!pending.texts.length && !pending.media.length)) return;
 
-    const { phone, texts, replyJid } = pending;
+    const { phone, texts, media, replyJid } = pending;
     const meta = this.pendingMeta.get(debounceKey);
     this.pendingTexts.delete(debounceKey);
     this.pendingMeta.delete(debounceKey);
@@ -252,7 +302,7 @@ export class WhatsAppBridge {
     this.activeAbort.set(debounceKey, controller);
 
     try {
-      await this.processMessage(phone, replyJid, combined, meta, controller);
+      await this.processMessage(phone, replyJid, combined, meta, controller, media);
     } catch (err) {
       console.error(`[whatsapp-bridge] task failed for ${debounceKey}:`, err);
     } finally {
@@ -261,7 +311,8 @@ export class WhatsAppBridge {
     }
 
     // Check if more messages arrived during processing
-    if (this.pendingTexts.has(debounceKey) && this.pendingTexts.get(debounceKey)!.texts.length > 0) {
+    const next = this.pendingTexts.get(debounceKey);
+    if (next && (next.texts.length > 0 || next.media.length > 0)) {
       void this.flushMessages(debounceKey);
     }
   }
@@ -304,6 +355,7 @@ export class WhatsAppBridge {
     text: string,
     meta?: MessageMetadata,
     controller?: AbortController,
+    mediaItems?: MediaAttachment[],
   ): Promise<void> {
     const agent = this.mastra.getAgent('coworkerAgent');
     if (!agent) {
@@ -318,10 +370,33 @@ export class WhatsAppBridge {
     const resourceId = 'coworker';
 
     // Build envelope
-    let content = text;
+    let envelopeText = text;
     if (meta) {
       const envelope = formatMessageEnvelope(meta);
-      content = `<message-context>\n${envelope}\n</message-context>\n${text}`;
+      envelopeText = `<message-context>\n${envelope}\n</message-context>\n${text}`;
+    }
+
+    // Save media to workspace and build text-only content
+    let content = envelopeText;
+    const hasMedia = mediaItems && mediaItems.length > 0;
+
+    if (hasMedia) {
+      for (const attachment of mediaItems) {
+        if (attachment.type === 'audio' && attachment.isVoiceNote) {
+          console.log('[whatsapp-bridge] voice note received — transcription stub');
+          content += '\n[Voice message received — transcription not yet available]';
+          continue;
+        }
+        const savedPath = await this.saveMediaToWorkspace(attachment, threadId);
+        if (savedPath) {
+          const parts = [attachment.type, attachment.mimeType];
+          if (attachment.fileName) parts.push(attachment.fileName);
+          if (attachment.fileSize) parts.push(`${Math.round(attachment.fileSize / 1024)} KB`);
+          content += `\n[Attachment: ${parts.join(', ')} saved to ${savedPath}]`;
+        } else {
+          content += `\n[Media: ${attachment.type} — download failed]`;
+        }
+      }
     }
 
     // Thread metadata
@@ -343,7 +418,7 @@ export class WhatsAppBridge {
       // Show typing indicator (fire-and-forget — NEVER await)
       this.socket.sendPresenceUpdate('composing', replyJid).catch(() => {});
 
-      console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."`);
+      console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."${hasMedia ? ` (+ ${mediaItems.length} media)` : ''}`);
 
       const response = await agent.generate(
         [{ role: 'user' as const, content }],
@@ -393,6 +468,43 @@ export class WhatsAppBridge {
       clearTimeout(timeout);
       // Clear typing indicator (fire-and-forget — NEVER await)
       this.socket.sendPresenceUpdate('paused', replyJid).catch(() => {});
+    }
+  }
+
+  /** Get or create the workspace filesystem for saving media. */
+  private async getWorkspaceFs(): Promise<LocalFilesystem> {
+    if (!this.workspaceFs) {
+      const base = process.env.WORKSPACE_PATH || path.resolve('./workspaces');
+      const agentId = process.env.AGENT_ID || 'coworker';
+      this.workspaceFs = new LocalFilesystem({ basePath: path.join(base, agentId) });
+      await this.workspaceFs.init();
+    }
+    return this.workspaceFs;
+  }
+
+  /** Save a media attachment to the workspace and return the virtual path, or null on failure. */
+  private async saveMediaToWorkspace(
+    attachment: MediaAttachment,
+    threadId: string,
+  ): Promise<string | null> {
+    try {
+      const buffer = await downloadMedia(attachment);
+      const shortId = crypto.randomBytes(4).toString('hex');
+      // Sanitize fileName to prevent path traversal
+      const safeName = attachment.fileName
+        ? path.basename(attachment.fileName).replace(/[^a-zA-Z0-9._-]/g, '_')
+        : null;
+      const name = safeName
+        || `${attachment.type}-${Date.now()}-${shortId}.${TYPE_EXT[attachment.type] || 'bin'}`;
+      const filePath = `whatsapp-attachments/${threadId}/${name}`;
+
+      const fs = await this.getWorkspaceFs();
+      await fs.writeFile(filePath, buffer, { recursive: true });
+
+      return `/workspace/${filePath}`;
+    } catch (err) {
+      console.warn(`[whatsapp-bridge] media save failed: ${err}`);
+      return null;
     }
   }
 

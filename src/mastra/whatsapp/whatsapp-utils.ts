@@ -1,7 +1,13 @@
+import {
+  extractMessageContent,
+  downloadContentFromMessage,
+} from '@whiskeysockets/baileys';
 import type { WAMessage, proto } from '@whiskeysockets/baileys';
+import type { MediaType } from '@whiskeysockets/baileys';
 
 export const MAX_WHATSAPP_TEXT_LENGTH = 3800;
 const SENT_MESSAGE_TTL_MS = 10 * 60_000;
+const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20 MB
 
 /**
  * Normalize a WhatsApp JID or raw phone string to "+{digits}" format.
@@ -19,20 +25,40 @@ export function normalizeWhatsAppId(value: string): string {
 }
 
 /**
+ * Unwrap view-once, ephemeral, and edited message wrappers using Baileys' extractMessageContent.
+ */
+function unwrapMessageContent(msg: WAMessage) {
+  return extractMessageContent(msg.message);
+}
+
+/**
  * Extract text content from a WhatsApp message.
- * Handles plain text, extended text, and media captions.
+ * Handles plain text, extended text, media captions, and locations.
+ * Unwraps view-once/ephemeral wrappers first.
  */
 export function extractText(message: WAMessage): string {
-  const content = message.message;
+  const content = unwrapMessageContent(message);
   if (!content) return '';
-  return (
+
+  // Text messages
+  const text =
     content.conversation ||
     content.extendedTextMessage?.text ||
     content.imageMessage?.caption ||
     content.videoMessage?.caption ||
     content.documentMessage?.caption ||
-    ''
-  );
+    '';
+  if (text) return text;
+
+  // Location as text
+  const loc = content.locationMessage;
+  if (loc) {
+    const parts = [`[Location: ${loc.degreesLatitude}, ${loc.degreesLongitude}`];
+    if (loc.name) parts[0] += ` — ${loc.name}`;
+    return parts[0] + ']';
+  }
+
+  return '';
 }
 
 /**
@@ -95,13 +121,21 @@ export class SentMessageTracker {
 
 /**
  * Extract contextInfo from any message type that may carry it.
+ * Unwraps view-once/ephemeral wrappers first.
  */
 export function getContextInfo(msg: WAMessage) {
+  const content = unwrapMessageContent(msg);
+  if (!content) return undefined;
   return (
-    msg.message?.extendedTextMessage?.contextInfo ??
-    msg.message?.imageMessage?.contextInfo ??
-    msg.message?.videoMessage?.contextInfo ??
-    msg.message?.documentMessage?.contextInfo
+    content.extendedTextMessage?.contextInfo ??
+    content.imageMessage?.contextInfo ??
+    content.videoMessage?.contextInfo ??
+    content.documentMessage?.contextInfo ??
+    content.audioMessage?.contextInfo ??
+    content.stickerMessage?.contextInfo ??
+    content.locationMessage?.contextInfo ??
+    (content as any).contactMessage?.contextInfo ??
+    (content as any).contactsArrayMessage?.contextInfo
   );
 }
 
@@ -137,6 +171,22 @@ function escapeXmlText(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+export interface MediaAttachment {
+  type: 'image' | 'video' | 'audio' | 'document' | 'sticker';
+  mimeType: string;
+  caption?: string;
+  fileName?: string;
+  fileSize?: number;
+  isVoiceNote?: boolean;
+  seconds?: number;
+  width?: number;
+  height?: number;
+  /** Baileys download fields (passed to downloadContentFromMessage) */
+  mediaKey?: Uint8Array | null;
+  directPath?: string | null;
+  url?: string | null;
+}
+
 export interface MessageMetadata {
   channel: string;
   type: 'dm' | 'group';
@@ -147,6 +197,161 @@ export interface MessageMetadata {
   groupJid?: string;
   isMentioned?: boolean;
   quotedText?: string;
+  media?: MediaAttachment;
+}
+
+/**
+ * Extract media metadata from a WhatsApp message. Does NOT download — just describes what media is present.
+ * Unwraps view-once/ephemeral wrappers first.
+ */
+export function extractMedia(msg: WAMessage): MediaAttachment | null {
+  const content = unwrapMessageContent(msg);
+  if (!content) return null;
+
+  if (content.imageMessage) {
+    const m = content.imageMessage;
+    return {
+      type: 'image',
+      mimeType: m.mimetype || 'image/jpeg',
+      caption: m.caption || undefined,
+      fileSize: typeof m.fileLength === 'number' ? m.fileLength : Number(m.fileLength) || undefined,
+      width: m.width || undefined,
+      height: m.height || undefined,
+      mediaKey: m.mediaKey || null,
+      directPath: m.directPath || null,
+      url: m.url || null,
+    };
+  }
+
+  if (content.videoMessage) {
+    const m = content.videoMessage;
+    return {
+      type: 'video',
+      mimeType: m.mimetype || 'video/mp4',
+      caption: m.caption || undefined,
+      fileSize: typeof m.fileLength === 'number' ? m.fileLength : Number(m.fileLength) || undefined,
+      seconds: m.seconds || undefined,
+      width: m.width || undefined,
+      height: m.height || undefined,
+      mediaKey: m.mediaKey || null,
+      directPath: m.directPath || null,
+      url: m.url || null,
+    };
+  }
+
+  if (content.audioMessage) {
+    const m = content.audioMessage;
+    return {
+      type: 'audio',
+      mimeType: m.mimetype || 'audio/ogg',
+      fileSize: typeof m.fileLength === 'number' ? m.fileLength : Number(m.fileLength) || undefined,
+      isVoiceNote: m.ptt === true,
+      seconds: m.seconds || undefined,
+      mediaKey: m.mediaKey || null,
+      directPath: m.directPath || null,
+      url: m.url || null,
+    };
+  }
+
+  if (content.documentMessage) {
+    const m = content.documentMessage;
+    return {
+      type: 'document',
+      mimeType: m.mimetype || 'application/octet-stream',
+      caption: m.caption || undefined,
+      fileName: m.fileName || undefined,
+      fileSize: typeof m.fileLength === 'number' ? m.fileLength : Number(m.fileLength) || undefined,
+      mediaKey: m.mediaKey || null,
+      directPath: m.directPath || null,
+      url: m.url || null,
+    };
+  }
+
+  if (content.stickerMessage) {
+    const m = content.stickerMessage;
+    return {
+      type: 'sticker',
+      mimeType: m.mimetype || 'image/webp',
+      fileSize: typeof m.fileLength === 'number' ? m.fileLength : Number(m.fileLength) || undefined,
+      width: m.width || undefined,
+      height: m.height || undefined,
+      mediaKey: m.mediaKey || null,
+      directPath: m.directPath || null,
+      url: m.url || null,
+    };
+  }
+
+  return null;
+}
+
+/** Map our attachment type to Baileys MediaType for download */
+const MEDIA_TYPE_MAP: Record<MediaAttachment['type'], MediaType> = {
+  image: 'image',
+  video: 'video',
+  audio: 'audio',
+  document: 'document',
+  sticker: 'sticker',
+};
+
+/**
+ * Download media bytes using Baileys' downloadContentFromMessage().
+ * Returns a Buffer with size limit enforcement.
+ */
+export async function downloadMedia(
+  attachment: MediaAttachment,
+  maxBytes: number = MAX_MEDIA_SIZE,
+): Promise<Buffer> {
+  const stream = await downloadContentFromMessage(
+    {
+      mediaKey: attachment.mediaKey,
+      directPath: attachment.directPath,
+      url: attachment.url,
+    } as any,
+    MEDIA_TYPE_MAP[attachment.type],
+  );
+
+  const chunks: Buffer[] = [];
+  let totalSize = 0;
+  for await (const chunk of stream) {
+    totalSize += chunk.length;
+    if (totalSize > maxBytes) {
+      stream.destroy();
+      throw new Error(`Media exceeds size limit (${maxBytes} bytes)`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Describe non-text, non-media message types (contacts, locations, reactions)
+ * that should be acknowledged but don't produce downloadable media.
+ */
+export function describeNonTextMessage(msg: WAMessage): string | null {
+  const content = unwrapMessageContent(msg);
+  if (!content) return null;
+
+  // Location
+  const loc = content.locationMessage;
+  if (loc) {
+    const desc = loc.name ? ` — ${loc.name}` : '';
+    return `[Location: ${loc.degreesLatitude}, ${loc.degreesLongitude}${desc}]`;
+  }
+
+  // Single contact
+  const contact = (content as any).contactMessage;
+  if (contact) {
+    return `[Contact: ${contact.displayName || 'Unknown'}]`;
+  }
+
+  // Contacts array
+  const contacts = (content as any).contactsArrayMessage;
+  if (contacts?.contacts?.length) {
+    const names = contacts.contacts.map((c: any) => c.displayName || 'Unknown').join(', ');
+    return `[Contacts: ${names}]`;
+  }
+
+  return null;
 }
 
 /**
@@ -172,6 +377,12 @@ export function formatMessageEnvelope(meta: MessageMetadata): string {
   }
   if (meta.quotedText) {
     lines.push(`  <quoted>${escapeXmlText(meta.quotedText)}</quoted>`);
+  }
+  if (meta.media) {
+    const attrs = [`type="${escapeXmlAttr(meta.media.type)}"`, `mimeType="${escapeXmlAttr(meta.media.mimeType)}"`];
+    if (meta.media.fileSize) attrs.push(`size="${meta.media.fileSize}"`);
+    if (meta.media.fileName) attrs.push(`fileName="${escapeXmlAttr(meta.media.fileName)}"`);
+    lines.push(`  <attachment ${attrs.join(' ')} />`);
   }
   lines.push('</context>');
   return lines.join('\n');

@@ -1,6 +1,11 @@
 ---
 name: messaging
+version: 1.0.0
 description: Send messages to users via WhatsApp and other connected channels. Use when asked to notify someone, send a message, reply to a contact, message a group, or proactively communicate through WhatsApp. Supports text, images, documents, audio, video, and stickers. Also provides group etiquette for observing group conversations — use `<no-reply/>` to stay silent when a response is not needed.
+tags:
+  - messaging
+  - whatsapp
+  - communication
 ---
 
 # Messaging

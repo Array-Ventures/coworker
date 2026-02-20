@@ -405,11 +405,19 @@ export const mastra = new Mastra({
       registerApiRoute('/messaging/send', {
         method: 'POST',
         handler: async (c) => {
-          const { channel, to, text, replyTo } = await c.req.json();
-          if (!channel || !to || !text) {
-            return c.json({ ok: false, error: 'channel, to, and text are required' }, 400);
+          const { channel, to, text, replyTo, media } = await c.req.json();
+          if (!channel || !to || (!text && !media?.length)) {
+            return c.json({ ok: false, error: 'channel, to, and text (or media) are required' }, 400);
           }
-          const result = await messageRouter.send(channel, to, text, replyTo ? { replyTo } : undefined);
+          const opts: any = {};
+          if (replyTo) opts.replyTo = replyTo;
+          if (media?.length) {
+            opts.media = media.map((m: any) => ({
+              ...m,
+              data: m.data ? Buffer.from(m.data, 'base64') : undefined,
+            }));
+          }
+          const result = await messageRouter.send(channel, to, text || '', Object.keys(opts).length ? opts : undefined);
           return c.json(result, result.ok ? 200 : 502);
         },
       }),

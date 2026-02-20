@@ -1,5 +1,16 @@
+export interface MediaPayload {
+  type: 'image' | 'video' | 'audio' | 'document' | 'sticker';
+  url?: string;
+  data?: Buffer;
+  mimeType?: string;
+  fileName?: string;
+  caption?: string;
+  ptt?: boolean;
+}
+
 export interface SendOpts {
   replyTo?: string;
+  media?: MediaPayload[];
 }
 
 export interface SendResult {

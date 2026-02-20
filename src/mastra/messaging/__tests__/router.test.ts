@@ -139,4 +139,35 @@ describe('MessageRouter', () => {
     expect(first.sentMessages).toHaveLength(0);
     expect(second.sentMessages).toHaveLength(1);
   });
+
+  test('send() passes opts.media to channel', async () => {
+    const router = new MessageRouter();
+    const { channel, sentMessages } = createMockChannel('whatsapp');
+
+    router.register(channel.id, channel);
+
+    const media = [{ type: 'image' as const, data: Buffer.from('test'), mimeType: 'image/jpeg' }];
+    const result = await router.send('whatsapp', '+1234567890', 'caption', { media });
+
+    expect(result.ok).toBe(true);
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0].opts?.media).toBeDefined();
+    expect(sentMessages[0].opts!.media![0].type).toBe('image');
+  });
+
+  test('channel receives media payload correctly', async () => {
+    const router = new MessageRouter();
+    const { channel, sentMessages } = createMockChannel('whatsapp');
+
+    router.register(channel.id, channel);
+
+    const media = [
+      { type: 'document' as const, data: Buffer.from('pdf-data'), mimeType: 'application/pdf', fileName: 'test.pdf' },
+    ];
+    await router.send('whatsapp', '+1234567890', '', { media });
+
+    expect(sentMessages).toHaveLength(1);
+    expect(sentMessages[0].opts?.media![0].mimeType).toBe('application/pdf');
+    expect(sentMessages[0].opts?.media![0].fileName).toBe('test.pdf');
+  });
 });

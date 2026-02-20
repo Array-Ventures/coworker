@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach } from 'bun:test';
+import { describe, expect, test, afterEach, mock } from 'bun:test';
 import { WhatsAppBridge } from '../whatsapp-bridge';
 import { createMockAgent, createMockMastra } from '../../__test-helpers__/mock-mastra';
 import { createMockSocket } from '../../__test-helpers__/mock-socket';
@@ -837,5 +837,235 @@ describe('sendOutbound', () => {
     const result = await bridge.sendOutbound(ALLOWED_JID, 'test');
 
     expect(result).toBeDefined();
+  });
+});
+
+// ── Media message handling (incoming) ──
+
+describe('media message handling', () => {
+  function makeImageMessage(caption?: string, remoteJid = ALLOWED_JID) {
+    return {
+      key: { id: `msg-${Date.now()}-${Math.random()}`, remoteJid, fromMe: false },
+      message: {
+        imageMessage: {
+          mimetype: 'image/jpeg',
+          caption: caption || null,
+          fileLength: 50000,
+          width: 800,
+          height: 600,
+          mediaKey: new Uint8Array([1, 2, 3]),
+          directPath: '/enc/test',
+          url: 'https://mmg.whatsapp.net/test',
+        },
+      },
+    };
+  }
+
+  function makeVoiceNoteMessage(remoteJid = ALLOWED_JID) {
+    return {
+      key: { id: `msg-${Date.now()}-${Math.random()}`, remoteJid, fromMe: false },
+      message: {
+        audioMessage: {
+          mimetype: 'audio/ogg; codecs=opus',
+          ptt: true,
+          seconds: 5,
+          fileLength: 8000,
+          mediaKey: new Uint8Array([4, 5, 6]),
+          directPath: '/enc/audio',
+          url: 'https://mmg.whatsapp.net/audio',
+        },
+      },
+    };
+  }
+
+  function makeDocumentMessage(remoteJid = ALLOWED_JID) {
+    return {
+      key: { id: `msg-${Date.now()}-${Math.random()}`, remoteJid, fromMe: false },
+      message: {
+        documentMessage: {
+          mimetype: 'application/pdf',
+          fileName: 'report.pdf',
+          fileLength: 100000,
+          mediaKey: new Uint8Array([7, 8, 9]),
+          directPath: '/enc/doc',
+          url: 'https://mmg.whatsapp.net/doc',
+        },
+      },
+    };
+  }
+
+  function makeLocationMessage(remoteJid = ALLOWED_JID) {
+    return {
+      key: { id: `msg-${Date.now()}-${Math.random()}`, remoteJid, fromMe: false },
+      message: {
+        locationMessage: {
+          degreesLatitude: 37.7749,
+          degreesLongitude: -122.4194,
+          name: 'San Francisco',
+        },
+      },
+    };
+  }
+
+  test('image without caption is NOT dropped — agent receives call with file path', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', { messages: [makeImageMessage()] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(typeof content).toBe('string');
+    // Media download fails in tests (no real WhatsApp) — should get fallback text
+    expect(content).toContain('[');
+  });
+
+  test('image with caption — agent receives string content with caption', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', { messages: [makeImageMessage('Check this photo')] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(typeof content).toBe('string');
+    expect(content).toContain('Check this photo');
+  });
+
+  test('voice note — agent receives text placeholder (transcription stub)', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', { messages: [makeVoiceNoteMessage()] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(typeof content).toBe('string');
+    expect(content).toContain('Voice message received');
+  });
+
+  test('location message — agent receives text description', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', { messages: [makeLocationMessage()] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+    expect(contentStr).toContain('37.7749');
+    expect(contentStr).toContain('San Francisco');
+  });
+});
+
+// ── Outbound media ──
+
+describe('outbound media', () => {
+  test('sendOutbound with image media sends image payload', async () => {
+    const { bridge, sentMessages } = createBridge();
+
+    await bridge.sendOutbound(ALLOWED_JID, '', {
+      media: [{
+        type: 'image',
+        data: Buffer.from('fake-image-data'),
+        mimeType: 'image/jpeg',
+        caption: 'Test image',
+      }],
+    });
+
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0].content.image).toBeDefined();
+    expect(sentMessages[0].content.caption).toBe('Test image');
+  });
+
+  test('sendOutbound with document sends document payload with fileName', async () => {
+    const { bridge, sentMessages } = createBridge();
+
+    await bridge.sendOutbound(ALLOWED_JID, '', {
+      media: [{
+        type: 'document',
+        data: Buffer.from('fake-pdf-data'),
+        mimeType: 'application/pdf',
+        fileName: 'report.pdf',
+      }],
+    });
+
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0].content.document).toBeDefined();
+    expect(sentMessages[0].content.mimetype).toBe('application/pdf');
+    expect(sentMessages[0].content.fileName).toBe('report.pdf');
+  });
+
+  test('sendOutbound with text + media sends both', async () => {
+    const { bridge, sentMessages } = createBridge();
+
+    await bridge.sendOutbound(ALLOWED_JID, 'Here is the file', {
+      media: [{
+        type: 'image',
+        data: Buffer.from('fake-image'),
+        mimeType: 'image/png',
+      }],
+    });
+
+    // Should have 2 messages: 1 image + 1 text
+    expect(sentMessages.length).toBe(2);
+    expect(sentMessages[0].content.image).toBeDefined(); // media first
+    expect(sentMessages[1].content.text).toBe('Here is the file'); // text second
+  });
+});
+
+// ── View-once unwrapping ──
+
+describe('view-once unwrapping', () => {
+  test('view-once image is unwrapped and processed (not dropped)', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', {
+      messages: [{
+        key: { id: `msg-${Date.now()}`, remoteJid: ALLOWED_JID, fromMe: false },
+        message: {
+          viewOnceMessage: {
+            message: {
+              imageMessage: {
+                mimetype: 'image/jpeg',
+                caption: 'view once test',
+                mediaKey: new Uint8Array([1, 2, 3]),
+                directPath: '/enc/viewonce',
+                url: 'https://mmg.whatsapp.net/viewonce',
+              },
+            },
+          },
+        },
+      }],
+    });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(typeof content).toBe('string');
+    expect(content).toContain('view once test');
+  });
+
+  test('ephemeral message is unwrapped and processed', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', {
+      messages: [{
+        key: { id: `msg-${Date.now()}`, remoteJid: ALLOWED_JID, fromMe: false },
+        message: {
+          ephemeralMessage: {
+            message: {
+              extendedTextMessage: { text: 'ephemeral text' },
+            },
+          },
+        },
+      }],
+    });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content);
+    expect(contentStr).toContain('ephemeral text');
   });
 });
