@@ -49,9 +49,9 @@ COPY --from=builder /app/.mastra/output ./
 RUN groupadd -g 1001 nodejs && \
     useradd -u 1001 -g nodejs -d /data/home -s /bin/bash mastra
 
-# Create workspace and data directories
-RUN mkdir -p /data/home /data/whatsapp-auth /data/gog /workspaces/shared /workspaces/coworker /workspaces/skills && \
-    chown -R mastra:nodejs /app /data /workspaces
+# Create data directories (workspaces are created by entrypoint using WORKSPACE_PATH)
+RUN mkdir -p /data/home /data/whatsapp-auth /data/gog && \
+    chown -R mastra:nodejs /app /data
 
 # Copy built-in skills for seeding into workspace
 COPY docker/builtin-skills /app/builtin-skills
