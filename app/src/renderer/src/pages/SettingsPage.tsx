@@ -838,6 +838,7 @@ function WhatsAppSection() {
 
 function EmailSection() {
   const gogInstalled = useAppStore((s) => s.gogInstalled)
+  const gogConfigured = useAppStore((s) => s.gogConfigured)
   const gogAccounts = useAppStore((s) => s.gogAccounts)
   const gogLoaded = useAppStore((s) => s.gogLoaded)
   const gogAuthUrl = useAppStore((s) => s.gogAuthUrl)
@@ -959,8 +960,33 @@ function EmailSection() {
         </div>
       )}
 
+      {/* Installed but not configured */}
+      {gogLoaded && gogInstalled && !gogConfigured && (
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl" style={{ padding: 20 }}>
+          <div className="flex items-start gap-3">
+            <span className="material-icon text-amber-600 dark:text-amber-400 shrink-0" style={{ fontSize: 20 }}>key_off</span>
+            <div>
+              <p className="font-secondary text-[14px] font-medium text-foreground mb-1">
+                Google OAuth not configured
+              </p>
+              <p className="font-secondary text-[13px] text-muted mb-3">
+                Set up Google OAuth credentials to connect your Google account. Add these environment variables and restart:
+              </p>
+              <div className="flex flex-col gap-1">
+                <code className="font-mono text-[13px] text-foreground bg-sidebar rounded-md inline-block" style={{ padding: '6px 12px' }}>
+                  GOG_GOOGLE_CLIENT_ID=your-client-id
+                </code>
+                <code className="font-mono text-[13px] text-foreground bg-sidebar rounded-md inline-block" style={{ padding: '6px 12px' }}>
+                  GOG_GOOGLE_CLIENT_SECRET=your-client-secret
+                </code>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Auth in progress */}
-      {gogInstalled && gogAuthUrl && gogAuthEmail && (
+      {gogConfigured && gogAuthUrl && gogAuthEmail && (
         <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
           <div className="flex items-center gap-2 mb-4">
             <span className="material-icon text-amber-500" style={{ fontSize: 18 }}>pending</span>
@@ -1024,7 +1050,7 @@ function EmailSection() {
       )}
 
       {/* Connected accounts */}
-      {gogInstalled && gogAccounts.length > 0 && !gogAuthUrl && (
+      {gogConfigured && gogAccounts.length > 0 && !gogAuthUrl && (
         <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
           <div className="flex items-center justify-between mb-3">
             <span className="font-secondary text-[14px] font-medium text-foreground">Google Accounts</span>
@@ -1156,8 +1182,8 @@ function EmailSection() {
         </div>
       )}
 
-      {/* Add account (when installed but no accounts and no auth in progress) */}
-      {gogInstalled && gogAccounts.length === 0 && !gogAuthUrl && (
+      {/* Add account (when configured but no accounts and no auth in progress) */}
+      {gogConfigured && gogAccounts.length === 0 && !gogAuthUrl && (
         <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
           <p className="font-secondary text-[14px] font-medium text-foreground mb-1">Add Google Account</p>
           <p className="font-secondary text-[13px] text-muted mb-3">
@@ -2268,8 +2294,10 @@ function AdvancedContent() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
+  const [appVersion, setAppVersion] = useState('dev')
 
   useEffect(() => {
+    ;(window as any).updater?.getAppVersion?.().then((v: string) => v && setAppVersion(v))
     const unsub = (window as any).updater?.onUpdateStatus?.((data: any) => {
       setUpdateStatus(data)
     })
@@ -2379,7 +2407,7 @@ function AdvancedContent() {
           <p className="font-secondary text-[12px] text-red-500 mt-2 m-0">Update error: {updateStatus.message}</p>
         )}
         <p className="font-secondary text-[11px] text-muted-dim mt-3 m-0">
-          Current version: {(window as any).electron?.process?.versions?.app || 'dev'}
+          Current version: {appVersion}
         </p>
       </div>
     </div>

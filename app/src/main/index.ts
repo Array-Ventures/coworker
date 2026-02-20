@@ -93,6 +93,7 @@ app.whenReady().then(() => {
     return true
   })
 
+  ipcMain.handle('get-app-version', () => app.getVersion())
   ipcMain.handle('check-for-updates', () => autoUpdater.checkForUpdates())
   ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
   ipcMain.handle('install-update', () => autoUpdater.quitAndInstall(false, true))

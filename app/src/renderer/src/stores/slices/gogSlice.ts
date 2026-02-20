@@ -11,6 +11,7 @@ import {
 
 export interface GogSlice {
   gogInstalled: boolean
+  gogConfigured: boolean
   gogAccounts: GogAccount[]
   gogLoaded: boolean
   gogAuthUrl: string | null
@@ -29,6 +30,7 @@ let _loadGog: Promise<void> | null = null
 
 export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, get) => ({
   gogInstalled: false,
+  gogConfigured: false,
   gogAccounts: [],
   gogLoaded: false,
   gogAuthUrl: null,
@@ -37,8 +39,8 @@ export const createGogSlice: StateCreator<AppStore, [], [], GogSlice> = (set, ge
 
   loadGogStatus: async () => {
     const fetcher = async () => {
-      const { installed, accounts } = await fetchGogStatus()
-      set({ gogInstalled: installed, gogAccounts: accounts })
+      const { installed, configured, accounts } = await fetchGogStatus()
+      set({ gogInstalled: installed, gogConfigured: configured, gogAccounts: accounts })
     }
 
     if (get().gogLoaded) { fetcher().catch(() => {}); return }

@@ -398,7 +398,7 @@ export interface GogAccount {
   auth: string
 }
 
-export async function fetchGogStatus(): Promise<{ installed: boolean; accounts: GogAccount[] }> {
+export async function fetchGogStatus(): Promise<{ installed: boolean; configured: boolean; accounts: GogAccount[] }> {
   const res = await fetch(`${MASTRA_BASE_URL}/gog/status`)
   return res.json()
 }
