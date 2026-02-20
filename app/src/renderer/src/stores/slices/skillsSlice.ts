@@ -1,7 +1,13 @@
 import type { StateCreator } from 'zustand'
 import type { AppStore } from '../useAppStore'
 import type { InstalledSkillInfo, SkillShBrowseItem } from '../../mastra-client'
-import { fetchInstalledSkills, installSkillSh, removeSkillSh } from '../../mastra-client'
+import {
+  fetchInstalledSkills,
+  installSkillSh,
+  removeSkillSh,
+  fetchPopularSkills,
+  searchSkillsSh,
+} from '../../mastra-client'
 
 export function skillKey(skill: SkillShBrowseItem): string {
   return `${skill.topSource}/${skill.id}`
@@ -12,17 +18,34 @@ export interface SkillsSlice {
   skillsLoaded: boolean
   installingKey: string | null
 
+  browseSkills: SkillShBrowseItem[]
+  browseLoaded: boolean
+  browseLoading: boolean
+  browseTotal: number
+  browseLoadingMore: boolean
+
   loadInstalledSkills: () => Promise<void>
   installSkill: (skill: SkillShBrowseItem) => Promise<boolean>
   uninstallSkill: (skill: SkillShBrowseItem) => Promise<boolean>
+
+  loadBrowseSkills: () => Promise<void>
+  loadMoreBrowseSkills: () => Promise<void>
+  searchBrowseSkills: (q: string) => Promise<void>
 }
 
 let _loadSkills: Promise<void> | null = null
+let _loadBrowse: Promise<void> | null = null
 
 export const createSkillsSlice: StateCreator<AppStore, [], [], SkillsSlice> = (set, get) => ({
   installedSkills: {},
   skillsLoaded: false,
   installingKey: null,
+
+  browseSkills: [],
+  browseLoaded: false,
+  browseLoading: false,
+  browseTotal: 0,
+  browseLoadingMore: false,
 
   loadInstalledSkills: async () => {
     const fetcher = async () => {
@@ -74,6 +97,49 @@ export const createSkillsSlice: StateCreator<AppStore, [], [], SkillsSlice> = (s
       return false
     } finally {
       set({ installingKey: null })
+    }
+  },
+
+  loadBrowseSkills: async () => {
+    const fetcher = async () => {
+      const { skills, count } = await fetchPopularSkills(20, 0)
+      set({ browseSkills: skills, browseTotal: count })
+    }
+
+    if (get().browseLoaded) { fetcher().catch(() => {}); return }
+
+    if (!_loadBrowse) {
+      set({ browseLoading: true })
+      _loadBrowse = fetcher()
+        .then(() => set({ browseLoaded: true }))
+        .catch(() => set({ browseLoaded: true }))
+        .finally(() => {
+          set({ browseLoading: false })
+          _loadBrowse = null
+        })
+    }
+    return _loadBrowse
+  },
+
+  loadMoreBrowseSkills: async () => {
+    const { browseSkills, browseTotal, browseLoadingMore } = get()
+    if (browseLoadingMore || browseSkills.length >= browseTotal) return
+    set({ browseLoadingMore: true })
+    try {
+      const { skills } = await fetchPopularSkills(20, browseSkills.length)
+      set((s) => ({ browseSkills: [...s.browseSkills, ...skills] }))
+    } finally {
+      set({ browseLoadingMore: false })
+    }
+  },
+
+  searchBrowseSkills: async (q) => {
+    set({ browseLoading: true })
+    try {
+      const { skills } = await searchSkillsSh(q)
+      set({ browseSkills: skills, browseTotal: skills.length })
+    } finally {
+      set({ browseLoading: false })
     }
   },
 })

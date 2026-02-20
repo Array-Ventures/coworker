@@ -33,7 +33,7 @@ export const searchMemoryTool = createTool({
       }
 
       // Look up thread titles for context
-      const uniqueThreadIds = [...new Set(messages.map((m: any) => m.threadId).filter(Boolean))];
+      const uniqueThreadIds = [...new Set((messages as any[]).map((m) => m.threadId as string).filter(Boolean))];
       const titleMap: Record<string, string> = {};
       await Promise.all(
         uniqueThreadIds.map(async (tid: string) => {

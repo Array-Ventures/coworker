@@ -20,7 +20,7 @@ export interface MockAgentOptions {
 }
 
 export interface GenerateCall {
-  messages: unknown[];
+  messages: { role: string; content: string; [key: string]: unknown }[];
   options: any;
 }
 
@@ -31,7 +31,7 @@ function abortError() {
 export function createMockAgent(opts: MockAgentOptions = {}) {
   const generateCalls: GenerateCall[] = [];
 
-  const generate = mock(async (messages: unknown[], options?: any) => {
+  const generate = mock(async (messages: GenerateCall['messages'], options?: any) => {
     generateCalls.push({ messages, options });
     const signal = options?.abortSignal as AbortSignal | undefined;
 

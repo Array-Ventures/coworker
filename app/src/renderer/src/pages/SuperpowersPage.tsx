@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { useSliceData } from '../hooks/useSliceData'
-import type { SkillShBrowseItem, McpRegistryItem, McpServerConfig } from '../mastra-client'
-import { fetchPopularSkills, searchSkillsSh } from '../mastra-client'
+import type { McpRegistryItem, McpServerConfig } from '../mastra-client'
 import { useAppStore } from '../stores/useAppStore'
 import { skillKey } from '../stores/slices/skillsSlice'
 import { registryKey, registryItemToConfig } from '../stores/slices/mcpRegistrySlice'
@@ -374,14 +373,6 @@ export default memo(function SuperpowersPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
-  // ── Skills state ──
-  const [skills, setSkills] = useState<SkillShBrowseItem[]>([])
-  const [skillsLoading, setSkillsLoading] = useState(true)
-  const [skillsLoadingMore, setSkillsLoadingMore] = useState(false)
-  const skillsOffsetRef = useRef(0)
-  const skillsTotalRef = useRef(0)
-  const skillsLoadingMoreRef = useRef(false)
-
   // ── Skills store ──
   const installedSkills = useAppStore((s) => s.installedSkills)
   const installingKey = useAppStore((s) => s.installingKey)
@@ -389,10 +380,17 @@ export default memo(function SuperpowersPage() {
   const installSkill = useAppStore((s) => s.installSkill)
   const uninstallSkill = useAppStore((s) => s.uninstallSkill)
 
+  // ── Skills browse store ──
+  const browseSkills = useAppStore((s) => s.browseSkills)
+  const browseLoading = useAppStore((s) => s.browseLoading)
+  const browseLoadingMore = useAppStore((s) => s.browseLoadingMore)
+  const loadBrowseSkills = useAppStore((s) => s.loadBrowseSkills)
+  const loadMoreBrowseSkills = useAppStore((s) => s.loadMoreBrowseSkills)
+  const searchBrowseSkillsFn = useAppStore((s) => s.searchBrowseSkills)
+
   // ── MCP Registry store ──
   const registryMcps = useAppStore((s) => s.registryMcps)
   const registryLoading = useAppStore((s) => s.registryLoading)
-  const registryLoaded = useAppStore((s) => s.registryLoaded)
   const registryLoadingMore = useAppStore((s) => s.registryLoadingMore)
   const registryAddingKey = useAppStore((s) => s.registryAddingKey)
   const loadRegistryMcps = useAppStore((s) => s.loadRegistryMcps)
@@ -417,60 +415,34 @@ export default memo(function SuperpowersPage() {
   useSliceData(loadMcpServers)
 
   // ── Load skills browse ──
+  // Always call loadBrowseSkills when tab is active & no search —
+  // the SWR pattern inside returns cached data instantly when browseLoaded,
+  // and silently revalidates in the background (also restores after search).
   useEffect(() => {
     if (tab !== 'skills' || search.trim()) return
-    let cancelled = false
-    setSkillsLoading(true)
-    skillsOffsetRef.current = 0
-    fetchPopularSkills(20, 0)
-      .then(({ skills: items, count }) => {
-        if (!cancelled) {
-          setSkills(items)
-          skillsTotalRef.current = count
-          skillsOffsetRef.current = items.length
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSkillsLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [tab, search])
+    loadBrowseSkills()
+  }, [tab, search, loadBrowseSkills])
 
   // ── Load MCP registry browse ──
   useEffect(() => {
     if (tab !== 'mcp' || search.trim()) return
-    if (!registryLoaded) loadRegistryMcps()
-  }, [tab, search, registryLoaded, loadRegistryMcps])
+    loadRegistryMcps()
+  }, [tab, search, loadRegistryMcps])
 
   // ── Infinite scroll ──
-  const loadMoreSkills = useCallback(() => {
-    if (skillsLoadingMoreRef.current || skillsOffsetRef.current >= skillsTotalRef.current) return
-    skillsLoadingMoreRef.current = true
-    setSkillsLoadingMore(true)
-    fetchPopularSkills(20, skillsOffsetRef.current)
-      .then(({ skills: items }) => {
-        setSkills((prev) => [...prev, ...items])
-        skillsOffsetRef.current += items.length
-      })
-      .finally(() => {
-        skillsLoadingMoreRef.current = false
-        setSkillsLoadingMore(false)
-      })
-  }, [])
-
   useEffect(() => {
     if (tab === 'installed' || search.trim()) return
     const el = sentinelRef.current
     const root = scrollRef.current
     if (!el || !root) return
 
-    const loading = tab === 'skills' ? skillsLoading : registryLoading
+    const loading = tab === 'skills' ? browseLoading : registryLoading
     if (loading) return
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
-          if (tab === 'skills') loadMoreSkills()
+          if (tab === 'skills') loadMoreBrowseSkills()
           else loadMoreRegistryMcps()
         }
       },
@@ -478,7 +450,7 @@ export default memo(function SuperpowersPage() {
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [tab, search, skillsLoading, registryLoading, loadMoreSkills, loadMoreRegistryMcps])
+  }, [tab, search, browseLoading, registryLoading, loadMoreBrowseSkills, loadMoreRegistryMcps])
 
   // ── Debounced search ──
   const handleSearch = useCallback(
@@ -489,16 +461,13 @@ export default memo(function SuperpowersPage() {
 
       debounceRef.current = setTimeout(() => {
         if (tab === 'skills') {
-          setSkillsLoading(true)
-          searchSkillsSh(value.trim())
-            .then(({ skills: items }) => setSkills(items))
-            .finally(() => setSkillsLoading(false))
+          searchBrowseSkillsFn(value.trim())
         } else if (tab === 'mcp') {
           searchRegistryMcpsFn(value.trim())
         }
       }, 300)
     },
-    [tab, searchRegistryMcpsFn],
+    [tab, searchBrowseSkillsFn, searchRegistryMcpsFn],
   )
 
   // ── Install handlers ──
@@ -552,10 +521,10 @@ export default memo(function SuperpowersPage() {
           : 'Popular MCP Servers'
 
   const isLoading =
-    (tab === 'skills' && skillsLoading) || (tab === 'mcp' && registryLoading)
+    (tab === 'skills' && browseLoading) || (tab === 'mcp' && registryLoading)
 
   const isLoadingMore =
-    (tab === 'skills' && skillsLoadingMore) || (tab === 'mcp' && registryLoadingMore)
+    (tab === 'skills' && browseLoadingMore) || (tab === 'mcp' && registryLoadingMore)
 
   return (
     <PageShell>
@@ -689,14 +658,14 @@ export default memo(function SuperpowersPage() {
             )
           ) : tab === 'skills' ? (
             /* ── Skills browse ── */
-            skills.length === 0 ? (
+            browseSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <span className="material-icon text-muted-dim mb-2" style={{ fontSize: 32 }}>search_off</span>
                 <p className="font-secondary text-[13px] text-muted-dim">No skills found</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                {skills.map((skill) => {
+                {browseSkills.map((skill) => {
                   const installed = installedSkills[skill.id]
                   const installedSource = installed?.skillsShSource
                     ? `${installed.skillsShSource.owner}/${installed.skillsShSource.repo}`

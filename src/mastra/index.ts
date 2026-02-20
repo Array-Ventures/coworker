@@ -28,7 +28,6 @@ import {
   pollGhAuth,
   ghLogout,
 } from './gh/gh-manager';
-import { compress } from 'hono/compress';
 import { messageRouter } from './messaging/router';
 
 const taskManager = new ScheduledTaskManager();
@@ -41,8 +40,6 @@ export const mastra = new Mastra({
     host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
-      // Gzip compression — critical for Studio's 5.7 MB main.js bundle
-      compress(),
       // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
       // MCP discovery routes (/api/mcp/v0/*, /api/mcp/*/tools*) are left open.
       ...(['/api/a2a/*', '/api/.well-known/*', '/api/mcp/*'] as const).map((path) => ({

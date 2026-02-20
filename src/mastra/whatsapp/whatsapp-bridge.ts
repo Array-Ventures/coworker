@@ -122,7 +122,7 @@ export class WhatsAppBridge {
         }
         const sent = await this.socket.sendMessage(to, payload);
         this.sentTracker.record(sent?.key?.id);
-        lastMsgId = sent?.key?.id;
+        lastMsgId = sent?.key?.id ?? undefined;
       }
     }
 
@@ -132,7 +132,7 @@ export class WhatsAppBridge {
       for (const chunk of chunks) {
         const sent = await this.socket.sendMessage(to, { text: chunk });
         this.sentTracker.record(sent?.key?.id);
-        lastMsgId = sent?.key?.id;
+        lastMsgId = sent?.key?.id ?? undefined;
       }
     }
 
