@@ -9,9 +9,11 @@ import {
   MAX_WHATSAPP_TEXT_LENGTH,
   SentMessageTracker,
 } from './whatsapp-utils';
-import { pool } from '../db';
+import { pool as defaultPool } from '../db';
 
 const PAIRING_TTL_MS = 60 * 60_000; // 1 hour
+const DEBOUNCE_MS = 2000; // 2s window to collect rapid messages
+const AGENT_TIMEOUT_MS = 5 * 60_000; // 5 min max per agent call
 
 function generatePairingCode(): string {
   return String(100_000 + crypto.randomInt(900_000));
@@ -20,13 +22,20 @@ function generatePairingCode(): string {
 export class WhatsAppBridge {
   private mastra: Mastra;
   private socket: WhatsAppSocket;
-  private messageQueue = new Map<string, Promise<void>>();
+  private pool: { query: (sql: string, params?: unknown[]) => Promise<any> };
   private sentTracker = new SentMessageTracker();
   private handler: ((arg: { messages: WAMessage[] }) => Promise<void>) | null = null;
 
-  constructor(mastra: Mastra, socket: WhatsAppSocket) {
+  // Debounce + abort state (replaces old messageQueue)
+  private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private pendingTexts = new Map<string, { phone: string; texts: string[] }>();
+  private activeAbort = new Map<string, AbortController>();
+  private processing = new Set<string>();
+
+  constructor(mastra: Mastra, socket: WhatsAppSocket, pool?: any) {
     this.mastra = mastra;
     this.socket = socket;
+    this.pool = pool ?? defaultPool;
   }
 
   /** Attach to the Baileys socket's message events. */
@@ -50,7 +59,14 @@ export class WhatsAppBridge {
       this.socket.ev.off('messages.upsert', this.handler);
       this.handler = null;
     }
-    this.messageQueue.clear();
+    // Clear all debounce timers
+    for (const timer of this.debounceTimers.values()) clearTimeout(timer);
+    this.debounceTimers.clear();
+    // Abort any active processing
+    for (const controller of this.activeAbort.values()) controller.abort();
+    this.activeAbort.clear();
+    this.pendingTexts.clear();
+    this.processing.clear();
   }
 
   private async handleMessage(msg: WAMessage): Promise<void> {
@@ -94,13 +110,68 @@ export class WhatsAppBridge {
 
     console.log(`[whatsapp-bridge] allowed — ${phone}, text: "${text.slice(0, 80)}"`);
 
-    // Enqueue per-contact to avoid concurrent agent calls
-    this.enqueue(remoteJid, () => this.processMessage(phone, remoteJid, text));
+    // Buffer message for debounce + abort
+    this.bufferMessage(remoteJid, phone, text);
+  }
+
+  /** Buffer a message and reset debounce timer. Aborts active processing if needed. */
+  private bufferMessage(remoteJid: string, phone: string, text: string): void {
+    // Accumulate text
+    const pending = this.pendingTexts.get(remoteJid) ?? { phone, texts: [] };
+    pending.texts.push(text);
+    this.pendingTexts.set(remoteJid, pending);
+
+    // If agent is actively processing for this contact, abort it
+    const activeController = this.activeAbort.get(remoteJid);
+    if (activeController) {
+      console.log(`[whatsapp-bridge] aborting active processing for ${phone} — new message arrived`);
+      activeController.abort();
+    }
+
+    // Reset debounce timer
+    const existing = this.debounceTimers.get(remoteJid);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      this.debounceTimers.delete(remoteJid);
+      void this.flushMessages(remoteJid);
+    }, DEBOUNCE_MS);
+    this.debounceTimers.set(remoteJid, timer);
+  }
+
+  /** Flush buffered messages into a single agent call. */
+  private async flushMessages(remoteJid: string): Promise<void> {
+    // If already processing, the abort will trigger a re-flush via bufferMessage
+    if (this.processing.has(remoteJid)) return;
+
+    const pending = this.pendingTexts.get(remoteJid);
+    if (!pending?.texts.length) return;
+
+    const { phone, texts } = pending;
+    this.pendingTexts.delete(remoteJid);
+
+    const combined = texts.join('\n');
+    this.processing.add(remoteJid);
+
+    try {
+      await this.processMessage(phone, remoteJid, combined);
+    } catch (err) {
+      // Aborts are caught inside processMessage and never reach here
+      console.error(`[whatsapp-bridge] task failed for ${remoteJid}:`, err);
+    } finally {
+      this.processing.delete(remoteJid);
+      this.activeAbort.delete(remoteJid);
+    }
+
+    // Check if more messages arrived during processing
+    if (this.pendingTexts.has(remoteJid) && this.pendingTexts.get(remoteJid)!.texts.length > 0) {
+      void this.flushMessages(remoteJid);
+    }
   }
 
   private async sendPairingCode(remoteJid: string): Promise<void> {
     // Check if there's already a pending pairing for this JID
-    const existing = await pool.query(
+    const existing = await this.pool.query(
       'SELECT code FROM whatsapp_pairing WHERE raw_jid = $1 AND expires_at > NOW()',
       [remoteJid],
     );
@@ -110,14 +181,14 @@ export class WhatsAppBridge {
       code = existing.rows[0].code as string;
     } else {
       // Clean up any expired entries for this JID
-      await pool.query(
+      await this.pool.query(
         'DELETE FROM whatsapp_pairing WHERE raw_jid = $1',
         [remoteJid],
       );
 
       code = generatePairingCode();
       const expiresAt = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
-      await pool.query(
+      await this.pool.query(
         'INSERT INTO whatsapp_pairing (code, raw_jid, expires_at) VALUES ($1, $2, $3)',
         [code, remoteJid, expiresAt],
       );
@@ -140,19 +211,24 @@ export class WhatsAppBridge {
     const threadId = `whatsapp-${phone}`;
     const resourceId = 'coworker';
 
+    // Create abort controller with timeout
+    const controller = new AbortController();
+    this.activeAbort.set(remoteJid, controller);
+    const timeout = setTimeout(() => {
+      console.warn(`[whatsapp-bridge] agent timed out for ${phone} after ${AGENT_TIMEOUT_MS / 1000}s`);
+      controller.abort();
+    }, AGENT_TIMEOUT_MS);
+
     try {
-      // Show typing indicator
-      try {
-        await this.socket.sendPresenceUpdate('composing', remoteJid);
-      } catch {
-        // ignore typing errors
-      }
+      // Show typing indicator (fire-and-forget — NEVER await)
+      this.socket.sendPresenceUpdate('composing', remoteJid).catch(() => {});
 
       console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."`);
 
       const response = await agent.generate(
         [{ role: 'user' as const, content: text }],
         {
+          abortSignal: controller.signal,
           memory: {
             thread: {
               id: threadId,
@@ -163,6 +239,9 @@ export class WhatsAppBridge {
           },
         },
       );
+
+      // If aborted (new message arrived), skip sending reply
+      if (controller.signal.aborted) return;
 
       const reply = response.text?.trim();
       if (!reply) return;
@@ -175,20 +254,23 @@ export class WhatsAppBridge {
       }
 
       console.log(`[whatsapp-bridge] replied to ${phone} (${reply.length} chars, ${chunks.length} chunk(s))`);
-    } finally {
-      // Clear typing indicator
-      try {
-        await this.socket.sendPresenceUpdate('paused', remoteJid);
-      } catch {
-        // ignore
+    } catch (err) {
+      if (controller.signal.aborted) {
+        console.log(`[whatsapp-bridge] aborted for ${phone} (new message or timeout)`);
+        return;
       }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+      // Clear typing indicator (fire-and-forget — NEVER await)
+      this.socket.sendPresenceUpdate('paused', remoteJid).catch(() => {});
     }
   }
 
   /** Check allowlist by raw JID or normalized phone number. */
   private async isAllowed(rawJid: string, phone: string): Promise<boolean> {
     try {
-      const result = await pool.query(
+      const result = await this.pool.query(
         'SELECT phone_number FROM whatsapp_allowlist WHERE raw_jid = $1 OR phone_number = $2',
         [rawJid, phone],
       );
@@ -197,20 +279,5 @@ export class WhatsAppBridge {
       console.error('[whatsapp-bridge] allowlist check failed:', err);
       return false; // fail-closed: reject if DB is down
     }
-  }
-
-  private enqueue(contactId: string, task: () => Promise<void>): void {
-    const previous = this.messageQueue.get(contactId) ?? Promise.resolve();
-    const next = previous
-      .then(task)
-      .catch((error) => {
-        console.error(`[whatsapp-bridge] task failed for ${contactId}:`, error);
-      })
-      .finally(() => {
-        if (this.messageQueue.get(contactId) === next) {
-          this.messageQueue.delete(contactId);
-        }
-      });
-    this.messageQueue.set(contactId, next);
   }
 }

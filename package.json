@@ -17,7 +17,9 @@
     "dev:app": "cd app && bun run dev",
     "build": "mastra build",
     "build:app": "cd app && bun run build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
   },
   "engines": {
     "node": ">=22.13.0"

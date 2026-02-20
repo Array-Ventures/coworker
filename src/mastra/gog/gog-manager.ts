@@ -1,4 +1,6 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
@@ -16,6 +18,33 @@ const GOG_ENV: Record<string, string> = {
   GOG_KEYRING_BACKEND: 'file',
   GOG_KEYRING_PASSWORD: process.env.GOG_KEYRING_PASSWORD || '',
 };
+
+/** Path where gog expects credentials.json (mirrors os.UserConfigDir() + "gogcli"). */
+const GOG_CREDENTIALS_PATH = join(GOG_HOME, '.config', 'gogcli', 'credentials.json');
+
+/**
+ * If GOG_GOOGLE_CLIENT_ID + GOG_GOOGLE_CLIENT_SECRET env vars are set,
+ * write credentials.json so gog can use them. Idempotent — skips if file exists.
+ */
+function ensureGogCredentials(): void {
+  const clientId = process.env.GOG_GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOG_GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return;
+  if (existsSync(GOG_CREDENTIALS_PATH)) return;
+
+  mkdirSync(join(GOG_HOME, '.config', 'gogcli'), { recursive: true });
+  writeFileSync(
+    GOG_CREDENTIALS_PATH,
+    JSON.stringify({ client_id: clientId, client_secret: clientSecret }, null, 2) + '\n',
+    { mode: 0o600 },
+  );
+}
+
+/** Check if Google OAuth credentials are configured (env vars or credentials.json on disk). */
+export function isGogConfigured(): boolean {
+  ensureGogCredentials();
+  return existsSync(GOG_CREDENTIALS_PATH);
+}
 
 export interface GogAccount {
   email: string;
