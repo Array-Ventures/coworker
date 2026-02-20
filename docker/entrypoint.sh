@@ -10,9 +10,10 @@ mkdir -p "$WORKSPACE/shared" "$WORKSPACE/coworker" "$WORKSPACE/skills"
 chown mastra:nodejs /data /data/home /data/whatsapp-auth /data/gog \
   "$WORKSPACE" "$WORKSPACE/shared" "$WORKSPACE/coworker" "$WORKSPACE/skills"
 
-# Seed built-in skills (overwrite on every deploy to pick up updates)
+# Seed built-in skills (clean copy on every deploy to pick up updates)
 for skill in /app/builtin-skills/*/; do
   name=$(basename "$skill")
+  rm -rf "$WORKSPACE/skills/$name"
   cp -r "$skill" "$WORKSPACE/skills/$name"
 done
 
