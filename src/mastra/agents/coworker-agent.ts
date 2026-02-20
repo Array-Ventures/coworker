@@ -60,7 +60,7 @@ export const coworkerAgent = new Agent({
   // The agent uses the searchMemory tool to recall messages agentically.
   inputProcessors: [noOpSemanticRecall],
   defaultOptions: async () => ({
-    maxSteps: 20,
+    maxSteps: 100,
     toolsets: await agentConfig.getMcpToolsets(),
   }),
 });
