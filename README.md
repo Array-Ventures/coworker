@@ -17,6 +17,40 @@ Open-source AI agent built with [Mastra](https://mastra.ai). Acts as an AI team 
 - **API access** — secure API key authentication for programmatic access and integrations
 - **Multi-provider AI** — switch between OpenAI, Anthropic, Google, NVIDIA, Groq, Kimi, or any OpenAI-compatible endpoint
 
+## Screenshots
+
+<p align="center">
+  <img src="assets/home.png" width="720" alt="Home — chat input with file attachments and suggestions" />
+</p>
+
+<p align="center">
+  <img src="assets/chat.png" width="720" alt="Chat — tool calls and structured responses" />
+</p>
+
+<p align="center">
+  <img src="assets/autopilot.png" width="720" alt="Autopilot — scheduled tasks with cron triggers" />
+</p>
+
+<p align="center">
+  <img src="assets/files.png" width="720" alt="Files — workspace file browser" />
+</p>
+
+<p align="center">
+  <img src="assets/skills.png" width="720" alt="Superpowers — browse and install skills from ClawHub" />
+</p>
+
+<p align="center">
+  <img src="assets/apps.png" width="720" alt="Apps — AI-generated internal tools and dashboards" />
+</p>
+
+<p align="center">
+  <img src="assets/settings-ai.png" width="720" alt="Settings — shape your AI's personality and knowledge" />
+</p>
+
+<p align="center">
+  <img src="assets/integrations.png" width="720" alt="Integrations — connect Google, Notion, Dropbox, and more" />
+</p>
+
 ## Stack
 
 - **Backend**: Mastra agents + tools (TypeScript)
