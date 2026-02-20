@@ -15,6 +15,7 @@ import { WhatsAppManager } from './whatsapp/whatsapp-manager';
 import { coworkerMcpServer } from './mcp/server';
 import {
   isGogInstalled,
+  isGogConfigured,
   listGogAccounts,
   startGogAuth,
   completeGogAuth,
@@ -35,6 +36,7 @@ export const mastra = new Mastra({
   agents: { coworkerAgent },
   mcpServers: { coworkerMcpServer },
   server: {
+    host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
       // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
@@ -208,8 +210,9 @@ export const mastra = new Mastra({
         method: 'GET',
         handler: async (c) => {
           const installed = await isGogInstalled();
-          const accounts = installed ? await listGogAccounts() : [];
-          return c.json({ installed, accounts });
+          const configured = installed ? isGogConfigured() : false;
+          const accounts = installed && configured ? await listGogAccounts() : [];
+          return c.json({ installed, configured, accounts });
         },
       }),
       registerApiRoute('/gog/auth/start', {
