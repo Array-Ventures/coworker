@@ -1,0 +1,61 @@
+#!/usr/bin/env bun
+/**
+ * msg — Send messages through connected channels (WhatsApp, etc.)
+ *
+ * Usage:
+ *   msg send --channel whatsapp --to "+1234567890" "Hello!"
+ *   msg send --channel whatsapp --to "120363001234@g.us" "Group message"
+ *   msg channels
+ *   msg groups
+ */
+
+const BASE = process.env.COWORKER_URL || `http://localhost:${process.env.PORT || 4111}`;
+
+async function api(method: string, path: string, body?: unknown) {
+  const res = await fetch(`${BASE}${path}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  console.log(JSON.stringify(data, null, 2));
+  if (!res.ok) process.exit(1);
+}
+
+const args = process.argv.slice(2);
+const command = args[0];
+
+function flag(name: string): string | undefined {
+  const idx = args.indexOf(`--${name}`);
+  return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : undefined;
+}
+
+switch (command) {
+  case 'send': {
+    const channel = flag('channel');
+    const to = flag('to');
+    const replyTo = flag('reply-to');
+    // Last positional arg that isn't a flag value is the message text
+    const text = args.filter((a, i) => {
+      if (a.startsWith('--')) return false;
+      if (i > 0 && args[i - 1]?.startsWith('--')) return false;
+      if (i === 0) return false; // skip 'send'
+      return true;
+    }).join(' ');
+    if (!channel || !to || !text) {
+      console.error('Usage: msg send --channel <ch> --to <recipient> "message"');
+      process.exit(1);
+    }
+    await api('POST', '/messaging/send', { channel, to, text, replyTo });
+    break;
+  }
+  case 'channels':
+    await api('GET', '/messaging/channels');
+    break;
+  case 'groups':
+    await api('GET', '/messaging/groups');
+    break;
+  default:
+    console.error('Usage: msg <send|channels|groups>');
+    process.exit(1);
+}

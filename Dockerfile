@@ -53,6 +53,9 @@ RUN groupadd -g 1001 nodejs && \
 RUN mkdir -p /data/home /data/whatsapp-auth /data/gog /workspaces/shared /workspaces/coworker /workspaces/skills && \
     chown -R mastra:nodejs /app /data /workspaces
 
+# Copy built-in skills for seeding into workspace
+COPY docker/builtin-skills /app/builtin-skills
+
 # Entrypoint: fix volume ownership (mounted as root), then drop to mastra user
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
