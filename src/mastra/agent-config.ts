@@ -59,11 +59,17 @@ export class AgentConfigManager {
   }
 
   async getModel(): Promise<string> {
-    return (await this.get('model')) ?? DEFAULT_MODEL;
+    console.time('[perf] getModel');
+    const model = (await this.get('model')) ?? DEFAULT_MODEL;
+    console.timeEnd('[perf] getModel');
+    return model;
   }
 
   async getInstructions(): Promise<string> {
-    return (await this.get('instructions')) ?? DEFAULT_INSTRUCTIONS;
+    console.time('[perf] getInstructions');
+    const instructions = (await this.get('instructions')) ?? DEFAULT_INSTRUCTIONS;
+    console.timeEnd('[perf] getInstructions');
+    return instructions;
   }
 
   async getConfig() {
@@ -123,17 +129,21 @@ export class AgentConfigManager {
   }
 
   async getMcpToolsets(): Promise<Record<string, Record<string, any>>> {
+    console.time('[perf] getMcpToolsets');
     const configs = await this.getMcpServers();
     const enabled = configs.filter((c) => c.enabled);
     if (enabled.length === 0) {
       await this.disconnectMcp();
+      console.timeEnd('[perf] getMcpToolsets');
       return {};
     }
 
     const hash = JSON.stringify(enabled);
     if (_mcpClient && _mcpConfigHash === hash) {
       try {
-        return await _mcpClient.listToolsets();
+        const toolsets = await _mcpClient.listToolsets();
+        console.timeEnd('[perf] getMcpToolsets');
+        return toolsets;
       } catch (err) {
         console.error('[mcp] listToolsets failed, recreating client:', err);
         await this.disconnectMcp();
@@ -141,19 +151,27 @@ export class AgentConfigManager {
     }
 
     const serverDefs = this.buildServerDefs(configs);
-    if (Object.keys(serverDefs).length === 0) return {};
+    if (Object.keys(serverDefs).length === 0) {
+      console.timeEnd('[perf] getMcpToolsets');
+      return {};
+    }
 
+    console.time('[perf] getMcpToolsets:newClient');
     _mcpClient = new MCPClient({
       id: 'coworker-mcp',
       servers: serverDefs,
       timeout: 30_000,
     });
     _mcpConfigHash = hash;
+    console.timeEnd('[perf] getMcpToolsets:newClient');
 
     try {
-      return await _mcpClient.listToolsets();
+      const toolsets = await _mcpClient.listToolsets();
+      console.timeEnd('[perf] getMcpToolsets');
+      return toolsets;
     } catch (err) {
       console.error('[mcp] Failed to get toolsets from new client:', err);
+      console.timeEnd('[perf] getMcpToolsets');
       return {};
     }
   }

@@ -29,6 +29,8 @@ import {
   ghLogout,
 } from './gh/gh-manager';
 import { compress } from 'hono/compress';
+import { logger } from 'hono/logger';
+import { timing } from 'hono/timing';
 import { messageRouter } from './messaging/router';
 import fs from 'fs';
 import nodePath from 'path';
@@ -43,6 +45,10 @@ export const mastra = new Mastra({
     host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
+      // Request logging — logs method, path, status, elapsed time to stdout (Railway logs)
+      logger(),
+      // Server-Timing header — visible in browser DevTools → Network → Timing
+      timing(),
       // Gzip compression — skips text/event-stream (SSE) automatically since Hono v4.7+
       compress(),
       // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
