@@ -5,6 +5,12 @@ import {
   chunkText,
   SentMessageTracker,
   MAX_WHATSAPP_TEXT_LENGTH,
+  isBotMentioned,
+  getContextInfo,
+  getQuotedText,
+  formatMessageEnvelope,
+  containsNoReply,
+  stripDirectives,
 } from '../whatsapp-utils';
 import type { WAMessage } from '@whiskeysockets/baileys';
 
@@ -172,5 +178,259 @@ describe('SentMessageTracker', () => {
     tracker.prune();
     expect(tracker.has('old-msg')).toBe(false);
     expect(tracker.has('new-msg')).toBe(true);
+  });
+});
+
+// ── isBotMentioned ──
+
+describe('isBotMentioned', () => {
+  function makeMsg(message: any): WAMessage {
+    return { key: { id: 'test', remoteJid: 'test@s.whatsapp.net' }, message } as WAMessage;
+  }
+
+  test('returns true when bot JID is in mentionedJid', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['1234567890@s.whatsapp.net'] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(true);
+  });
+
+  test('returns false when mentionedJid is empty array', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: 'hello',
+        contextInfo: { mentionedJid: [] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(false);
+  });
+
+  test('returns false when contextInfo is missing', () => {
+    const msg = makeMsg({
+      extendedTextMessage: { text: 'hello' },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(false);
+  });
+
+  test('handles bot JID with :device suffix — matches by number part only', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['1234567890@s.whatsapp.net'] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890:5@s.whatsapp.net')).toBe(true);
+  });
+
+  test('returns false for non-matching JIDs', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: '@someone hello',
+        contextInfo: { mentionedJid: ['9999999999@s.whatsapp.net'] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(false);
+  });
+
+  test('works with imageMessage.contextInfo', () => {
+    const msg = makeMsg({
+      imageMessage: {
+        caption: '@bot look at this',
+        contextInfo: { mentionedJid: ['1234567890@s.whatsapp.net'] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(true);
+  });
+});
+
+// ── getContextInfo ──
+
+describe('getContextInfo', () => {
+  function makeMsg(message: any): WAMessage {
+    return { key: { id: 'test', remoteJid: 'test@s.whatsapp.net' }, message } as WAMessage;
+  }
+
+  test('extracts from extendedTextMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ extendedTextMessage: { text: 'hi', contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
+
+  test('extracts from imageMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ imageMessage: { caption: 'photo', contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
+
+  test('extracts from videoMessage.contextInfo', () => {
+    const contextInfo = { mentionedJid: ['someone@s.whatsapp.net'] };
+    const msg = makeMsg({ videoMessage: { caption: 'video', contextInfo } });
+    expect(getContextInfo(msg)).toEqual(contextInfo);
+  });
+
+  test('returns undefined when no contextInfo', () => {
+    const msg = makeMsg({ conversation: 'hello' });
+    expect(getContextInfo(msg)).toBeUndefined();
+  });
+});
+
+// ── getQuotedText ──
+
+describe('getQuotedText', () => {
+  function makeMsg(message: any): WAMessage {
+    return { key: { id: 'test', remoteJid: 'test@s.whatsapp.net' }, message } as WAMessage;
+  }
+
+  test('extracts quoted conversation text', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: 'reply',
+        contextInfo: {
+          quotedMessage: { conversation: 'original message' },
+        },
+      },
+    });
+    expect(getQuotedText(msg)).toBe('original message');
+  });
+
+  test('extracts quoted extendedTextMessage text', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: 'reply',
+        contextInfo: {
+          quotedMessage: { extendedTextMessage: { text: 'quoted extended' } },
+        },
+      },
+    });
+    expect(getQuotedText(msg)).toBe('quoted extended');
+  });
+
+  test('returns undefined when no quoted message', () => {
+    const msg = makeMsg({ conversation: 'hello' });
+    expect(getQuotedText(msg)).toBeUndefined();
+  });
+});
+
+// ── formatMessageEnvelope ──
+
+describe('formatMessageEnvelope', () => {
+  interface MessageMetadata {
+    channel: string;
+    type: 'dm' | 'group';
+    senderJid: string;
+    senderName?: string;
+    timestamp: number;
+    groupName?: string;
+    groupJid?: string;
+    isMentioned?: boolean;
+    quotedText?: string;
+  }
+
+  test('DM envelope has channel, type, sender, timestamp', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'dm',
+      senderJid: '1234567890@s.whatsapp.net',
+      senderName: 'Alice',
+      timestamp: 1700000000,
+    };
+    const result = formatMessageEnvelope(meta as any);
+    expect(result).toContain('whatsapp');
+    expect(result).toContain('dm');
+    expect(result).toContain('1234567890@s.whatsapp.net');
+    expect(result).toContain('1700000000');
+  });
+
+  test('group envelope has group element with name and jid', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'group',
+      senderJid: '1234567890@s.whatsapp.net',
+      timestamp: 1700000000,
+      groupName: 'Test Group',
+      groupJid: '120363000000@g.us',
+    };
+    const result = formatMessageEnvelope(meta as any);
+    expect(result).toContain('Test Group');
+    expect(result).toContain('120363000000@g.us');
+  });
+
+  test('group envelope has mentioned flag', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'group',
+      senderJid: '1234567890@s.whatsapp.net',
+      timestamp: 1700000000,
+      groupName: 'Test Group',
+      groupJid: '120363000000@g.us',
+      isMentioned: true,
+    };
+    const result = formatMessageEnvelope(meta as any);
+    expect(result).toContain('mentioned');
+  });
+
+  test('includes quoted element when present', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'dm',
+      senderJid: '1234567890@s.whatsapp.net',
+      timestamp: 1700000000,
+      quotedText: 'the original message',
+    };
+    const result = formatMessageEnvelope(meta as any);
+    expect(result).toContain('the original message');
+    expect(result).toContain('quoted');
+  });
+
+  test('XML is well-formed', () => {
+    const meta: MessageMetadata = {
+      channel: 'whatsapp',
+      type: 'dm',
+      senderJid: '1234567890@s.whatsapp.net',
+      timestamp: 1700000000,
+    };
+    const result = formatMessageEnvelope(meta as any);
+    // Should start with an opening tag and end with a closing tag
+    expect(result).toMatch(/^<\w+[\s>]/);
+    expect(result).toMatch(/<\/\w+>\s*$/);
+  });
+});
+
+// ── containsNoReply ──
+
+describe('containsNoReply', () => {
+  test('true for text with <no-reply/>', () => {
+    expect(containsNoReply('<no-reply/>')).toBe(true);
+  });
+
+  test('true when surrounded by other text', () => {
+    expect(containsNoReply('Some text <no-reply/> more text')).toBe(true);
+  });
+
+  test('false for regular text', () => {
+    expect(containsNoReply('Hello, how are you?')).toBe(false);
+  });
+
+  test('false for empty string', () => {
+    expect(containsNoReply('')).toBe(false);
+  });
+});
+
+// ── stripDirectives ──
+
+describe('stripDirectives', () => {
+  test('removes <no-reply/>', () => {
+    expect(stripDirectives('Hello <no-reply/> world')).toBe('Hello  world');
+  });
+
+  test('unchanged when no directives', () => {
+    expect(stripDirectives('Hello world')).toBe('Hello world');
+  });
+
+  test('trims result', () => {
+    expect(stripDirectives('  <no-reply/> Hello  ')).toBe('Hello');
   });
 });

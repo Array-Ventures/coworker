@@ -35,6 +35,9 @@ function buildWorkspace() {
         GOG_KEYRING_BACKEND: 'file',
         GOG_KEYRING_PASSWORD: process.env.GOG_KEYRING_PASSWORD || '',
         GH_TOKEN: process.env.GH_TOKEN || '',
+        COWORKER_URL: process.env.MASTRA_HOST
+          ? `http://${process.env.MASTRA_HOST}:${process.env.PORT || 4111}`
+          : `http://localhost:${process.env.PORT || 4111}`,
       },
       isolation: detection.available ? detection.backend : "none",
       nativeSandbox: {

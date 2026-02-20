@@ -1,4 +1,4 @@
-import type { WAMessage } from '@whiskeysockets/baileys';
+import type { WAMessage, proto } from '@whiskeysockets/baileys';
 
 export const MAX_WHATSAPP_TEXT_LENGTH = 3800;
 const SENT_MESSAGE_TTL_MS = 10 * 60_000;
@@ -91,4 +91,102 @@ export class SentMessageTracker {
       }
     }
   }
+}
+
+/**
+ * Extract contextInfo from any message type that may carry it.
+ */
+export function getContextInfo(msg: WAMessage) {
+  return (
+    msg.message?.extendedTextMessage?.contextInfo ??
+    msg.message?.imageMessage?.contextInfo ??
+    msg.message?.videoMessage?.contextInfo ??
+    msg.message?.documentMessage?.contextInfo
+  );
+}
+
+/**
+ * Check if the bot is mentioned in the message's contextInfo.mentionedJid.
+ * Compares by number part only (strips :device suffix and @domain).
+ */
+export function isBotMentioned(msg: WAMessage, botJid: string): boolean {
+  const ctx = getContextInfo(msg);
+  if (!ctx?.mentionedJid?.length) return false;
+  const botNumber = botJid.split(':')[0].split('@')[0];
+  return ctx.mentionedJid.some(
+    (jid: string) => jid.split(':')[0].split('@')[0] === botNumber,
+  );
+}
+
+/**
+ * Extract the text of a quoted (replied-to) message, if any.
+ */
+export function getQuotedText(msg: WAMessage): string | undefined {
+  const quoted = getContextInfo(msg)?.quotedMessage;
+  if (!quoted) return undefined;
+  return quoted.conversation || quoted.extendedTextMessage?.text || undefined;
+}
+
+/** Escape a string for use in an XML attribute value (double-quoted). */
+function escapeXmlAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Escape a string for use as XML text content. */
+function escapeXmlText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+export interface MessageMetadata {
+  channel: string;
+  type: 'dm' | 'group';
+  senderJid: string;
+  senderName?: string;
+  timestamp: number;
+  groupName?: string;
+  groupJid?: string;
+  isMentioned?: boolean;
+  quotedText?: string;
+}
+
+/**
+ * Build an XML envelope string from message metadata.
+ */
+export function formatMessageEnvelope(meta: MessageMetadata): string {
+  const lines: string[] = ['<context>'];
+  lines.push(`  <channel>${meta.channel}</channel>`);
+  lines.push(`  <type>${meta.type}</type>`);
+  if (meta.senderName) {
+    lines.push(`  <sender name="${escapeXmlAttr(meta.senderName)}" jid="${escapeXmlAttr(meta.senderJid)}" />`);
+  } else {
+    lines.push(`  <sender jid="${escapeXmlAttr(meta.senderJid)}" />`);
+  }
+  lines.push(`  <timestamp>${meta.timestamp}</timestamp>`);
+  if (meta.type === 'group') {
+    if (meta.groupName || meta.groupJid) {
+      lines.push(`  <group name="${escapeXmlAttr(meta.groupName ?? '')}" jid="${escapeXmlAttr(meta.groupJid ?? '')}" />`);
+    }
+    if (meta.isMentioned) {
+      lines.push(`  <mentioned>true</mentioned>`);
+    }
+  }
+  if (meta.quotedText) {
+    lines.push(`  <quoted>${escapeXmlText(meta.quotedText)}</quoted>`);
+  }
+  lines.push('</context>');
+  return lines.join('\n');
+}
+
+/**
+ * Check if text contains the <no-reply/> directive.
+ */
+export function containsNoReply(text: string): boolean {
+  return text.includes('<no-reply/>');
+}
+
+/**
+ * Remove directive tags and trim whitespace.
+ */
+export function stripDirectives(text: string): string {
+  return text.replace(/<no-reply\/>/g, '').trim();
 }

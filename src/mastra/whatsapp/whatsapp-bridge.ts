@@ -8,15 +8,28 @@ import {
   chunkText,
   MAX_WHATSAPP_TEXT_LENGTH,
   SentMessageTracker,
+  isBotMentioned,
+  getContextInfo,
+  getQuotedText,
+  formatMessageEnvelope,
+  containsNoReply,
+  stripDirectives,
+  type MessageMetadata,
 } from './whatsapp-utils';
 import { pool as defaultPool } from '../db';
 
 const PAIRING_TTL_MS = 60 * 60_000; // 1 hour
 const DEBOUNCE_MS = 2000; // 2s window to collect rapid messages
 const AGENT_TIMEOUT_MS = 5 * 60_000; // 5 min max per agent call
+const GROUP_META_TTL_MS = 5 * 60_000; // 5 min cache for group metadata
 
 function generatePairingCode(): string {
   return String(100_000 + crypto.randomInt(900_000));
+}
+
+interface GroupMeta {
+  name: string;
+  fetchedAt: number;
 }
 
 export class WhatsAppBridge {
@@ -28,9 +41,15 @@ export class WhatsAppBridge {
 
   // Debounce + abort state (replaces old messageQueue)
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pendingTexts = new Map<string, { phone: string; texts: string[] }>();
+  private pendingTexts = new Map<string, { phone: string; texts: string[]; replyJid: string }>();
   private activeAbort = new Map<string, AbortController>();
   private processing = new Set<string>();
+
+  // Group metadata cache
+  private groupMetaCache = new Map<string, GroupMeta>();
+
+  // Per-message metadata for envelope building (keyed by debounce key)
+  private pendingMeta = new Map<string, MessageMetadata>();
 
   constructor(mastra: Mastra, socket: WhatsAppSocket, pool?: any) {
     this.mastra = mastra;
@@ -66,7 +85,20 @@ export class WhatsAppBridge {
     for (const controller of this.activeAbort.values()) controller.abort();
     this.activeAbort.clear();
     this.pendingTexts.clear();
+    this.pendingMeta.clear();
     this.processing.clear();
+  }
+
+  /** Send a message outbound (for message router). */
+  async sendOutbound(to: string, text: string): Promise<string | undefined> {
+    const chunks = chunkText(text, MAX_WHATSAPP_TEXT_LENGTH);
+    let lastMsgId: string | undefined;
+    for (const chunk of chunks) {
+      const sent = await this.socket.sendMessage(to, { text: chunk });
+      this.sentTracker.record(sent?.key?.id);
+      lastMsgId = sent?.key?.id;
+    }
+    return lastMsgId;
   }
 
   private async handleMessage(msg: WAMessage): Promise<void> {
@@ -87,85 +119,150 @@ export class WhatsAppBridge {
     const remoteJid = msg.key.remoteJid;
     if (!remoteJid) return;
 
-    // Skip group messages (V1: DMs only)
-    if (isJidGroup(remoteJid)) return;
-
     const text = extractText(msg);
     if (!text.trim()) return;
 
-    const phone = normalizeWhatsAppId(remoteJid);
-    console.log(`[whatsapp-bridge] incoming from raw JID: ${remoteJid} → normalized: ${phone}`);
+    const isGroup = isJidGroup(remoteJid);
 
-    // Check allowlist (match by raw JID or normalized phone)
-    const allowed = await this.isAllowed(remoteJid, phone);
-    if (!allowed) {
-      console.log(`[whatsapp-bridge] not in allowlist — initiating pairing for ${remoteJid}`);
-      try {
-        await this.sendPairingCode(remoteJid);
-      } catch (err) {
-        console.error('[whatsapp-bridge] sendPairingCode failed:', err);
+    if (isGroup) {
+      // Group message flow
+      const groupAllowed = await this.isGroupAllowed(remoteJid);
+      if (!groupAllowed) return; // silently ignore
+
+      const participant = msg.key.participant as string | undefined;
+      if (!participant) return;
+
+      const phone = normalizeWhatsAppId(participant);
+      const debounceKey = `${remoteJid}:${participant}`;
+      const mentioned = isBotMentioned(msg, (this.socket as any).user?.id ?? '');
+      const quotedText = getQuotedText(msg);
+      const groupMeta = await this.getGroupMeta(remoteJid);
+
+      const meta: MessageMetadata = {
+        channel: 'whatsapp',
+        type: 'group',
+        senderJid: participant,
+        senderName: (msg as any).pushName,
+        timestamp: typeof (msg as any).messageTimestamp === 'number'
+          ? (msg as any).messageTimestamp
+          : Math.floor(Date.now() / 1000),
+        groupName: groupMeta.name,
+        groupJid: remoteJid,
+        isMentioned: mentioned,
+        quotedText,
+      };
+
+      console.log(`[whatsapp-bridge] group msg from ${phone} in ${groupMeta.name} (mentioned=${mentioned})`);
+
+      this.bufferMessage(debounceKey, phone, text, remoteJid, meta, mentioned);
+    } else {
+      // DM flow
+      const phone = normalizeWhatsAppId(remoteJid);
+      console.log(`[whatsapp-bridge] incoming from raw JID: ${remoteJid} → normalized: ${phone}`);
+
+      const allowed = await this.isAllowed(remoteJid, phone);
+      if (!allowed) {
+        console.log(`[whatsapp-bridge] not in allowlist — initiating pairing for ${remoteJid}`);
+        try {
+          await this.sendPairingCode(remoteJid);
+        } catch (err) {
+          console.error('[whatsapp-bridge] sendPairingCode failed:', err);
+        }
+        return;
       }
-      return;
+
+      console.log(`[whatsapp-bridge] allowed — ${phone}, text: "${text.slice(0, 80)}"`);
+
+      const quotedText = getQuotedText(msg);
+      const meta: MessageMetadata = {
+        channel: 'whatsapp',
+        type: 'dm',
+        senderJid: remoteJid,
+        senderName: (msg as any).pushName,
+        timestamp: typeof (msg as any).messageTimestamp === 'number'
+          ? (msg as any).messageTimestamp
+          : Math.floor(Date.now() / 1000),
+        quotedText,
+      };
+
+      this.bufferMessage(remoteJid, phone, text, remoteJid, meta, false);
     }
-
-    console.log(`[whatsapp-bridge] allowed — ${phone}, text: "${text.slice(0, 80)}"`);
-
-    // Buffer message for debounce + abort
-    this.bufferMessage(remoteJid, phone, text);
   }
 
   /** Buffer a message and reset debounce timer. Aborts active processing if needed. */
-  private bufferMessage(remoteJid: string, phone: string, text: string): void {
+  private bufferMessage(
+    debounceKey: string,
+    phone: string,
+    text: string,
+    replyJid: string,
+    meta: MessageMetadata,
+    immediateFlush: boolean,
+  ): void {
     // Accumulate text
-    const pending = this.pendingTexts.get(remoteJid) ?? { phone, texts: [] };
+    const pending = this.pendingTexts.get(debounceKey) ?? { phone, texts: [], replyJid };
     pending.texts.push(text);
-    this.pendingTexts.set(remoteJid, pending);
+    this.pendingTexts.set(debounceKey, pending);
+
+    // Store latest metadata (last message wins for envelope)
+    this.pendingMeta.set(debounceKey, meta);
 
     // If agent is actively processing for this contact, abort it
-    const activeController = this.activeAbort.get(remoteJid);
+    const activeController = this.activeAbort.get(debounceKey);
     if (activeController) {
       console.log(`[whatsapp-bridge] aborting active processing for ${phone} — new message arrived`);
       activeController.abort();
     }
 
-    // Reset debounce timer
-    const existing = this.debounceTimers.get(remoteJid);
+    // Clear existing debounce timer
+    const existing = this.debounceTimers.get(debounceKey);
     if (existing) clearTimeout(existing);
 
-    const timer = setTimeout(() => {
-      this.debounceTimers.delete(remoteJid);
-      void this.flushMessages(remoteJid);
-    }, DEBOUNCE_MS);
-    this.debounceTimers.set(remoteJid, timer);
+    if (immediateFlush) {
+      // Mention: skip debounce, flush immediately
+      this.debounceTimers.delete(debounceKey);
+      void this.flushMessages(debounceKey);
+    } else {
+      // Normal debounce
+      const timer = setTimeout(() => {
+        this.debounceTimers.delete(debounceKey);
+        void this.flushMessages(debounceKey);
+      }, DEBOUNCE_MS);
+      this.debounceTimers.set(debounceKey, timer);
+    }
   }
 
   /** Flush buffered messages into a single agent call. */
-  private async flushMessages(remoteJid: string): Promise<void> {
+  private async flushMessages(debounceKey: string): Promise<void> {
     // If already processing, the abort will trigger a re-flush via bufferMessage
-    if (this.processing.has(remoteJid)) return;
+    if (this.processing.has(debounceKey)) return;
 
-    const pending = this.pendingTexts.get(remoteJid);
+    const pending = this.pendingTexts.get(debounceKey);
     if (!pending?.texts.length) return;
 
-    const { phone, texts } = pending;
-    this.pendingTexts.delete(remoteJid);
+    const { phone, texts, replyJid } = pending;
+    const meta = this.pendingMeta.get(debounceKey);
+    this.pendingTexts.delete(debounceKey);
+    this.pendingMeta.delete(debounceKey);
 
     const combined = texts.join('\n');
-    this.processing.add(remoteJid);
+    this.processing.add(debounceKey);
+
+    // Register AbortController immediately so new messages can abort us
+    const controller = new AbortController();
+    this.activeAbort.set(debounceKey, controller);
 
     try {
-      await this.processMessage(phone, remoteJid, combined);
+      await this.processMessage(phone, replyJid, combined, meta, controller);
     } catch (err) {
-      // Aborts are caught inside processMessage and never reach here
-      console.error(`[whatsapp-bridge] task failed for ${remoteJid}:`, err);
+      console.error(`[whatsapp-bridge] task failed for ${debounceKey}:`, err);
     } finally {
-      this.processing.delete(remoteJid);
-      this.activeAbort.delete(remoteJid);
+      this.processing.delete(debounceKey);
+      this.activeAbort.delete(debounceKey);
     }
 
     // Check if more messages arrived during processing
-    if (this.pendingTexts.has(remoteJid) && this.pendingTexts.get(remoteJid)!.texts.length > 0) {
-      void this.flushMessages(remoteJid);
+    if (this.pendingTexts.has(debounceKey) && this.pendingTexts.get(debounceKey)!.texts.length > 0) {
+      void this.flushMessages(debounceKey);
     }
   }
 
@@ -201,19 +298,42 @@ export class WhatsAppBridge {
     this.sentTracker.record(sent?.key?.id);
   }
 
-  private async processMessage(phone: string, remoteJid: string, text: string): Promise<void> {
+  private async processMessage(
+    phone: string,
+    replyJid: string,
+    text: string,
+    meta?: MessageMetadata,
+    controller?: AbortController,
+  ): Promise<void> {
     const agent = this.mastra.getAgent('coworkerAgent');
     if (!agent) {
       console.error('[whatsapp-bridge] coworkerAgent not found');
       return;
     }
 
-    const threadId = `whatsapp-${phone}`;
+    const isGroup = meta?.type === 'group';
+    const threadId = isGroup
+      ? `whatsapp-group-${meta!.groupJid}`
+      : `whatsapp-${phone}`;
     const resourceId = 'coworker';
 
-    // Create abort controller with timeout
-    const controller = new AbortController();
-    this.activeAbort.set(remoteJid, controller);
+    // Build envelope
+    let content = text;
+    if (meta) {
+      const envelope = formatMessageEnvelope(meta);
+      content = `<message-context>\n${envelope}\n</message-context>\n${text}`;
+    }
+
+    // Thread metadata
+    const threadTitle = isGroup
+      ? `WhatsApp Group: ${meta!.groupName}`
+      : `WhatsApp: ${phone}`;
+    const threadMetadata = isGroup
+      ? { type: 'whatsapp-group', groupJid: meta!.groupJid, groupName: meta!.groupName }
+      : { type: 'whatsapp', phone };
+
+    // Use provided controller or create one (backward compat)
+    if (!controller) controller = new AbortController();
     const timeout = setTimeout(() => {
       console.warn(`[whatsapp-bridge] agent timed out for ${phone} after ${AGENT_TIMEOUT_MS / 1000}s`);
       controller.abort();
@@ -221,19 +341,19 @@ export class WhatsAppBridge {
 
     try {
       // Show typing indicator (fire-and-forget — NEVER await)
-      this.socket.sendPresenceUpdate('composing', remoteJid).catch(() => {});
+      this.socket.sendPresenceUpdate('composing', replyJid).catch(() => {});
 
       console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."`);
 
       const response = await agent.generate(
-        [{ role: 'user' as const, content: text }],
+        [{ role: 'user' as const, content }],
         {
           abortSignal: controller.signal,
           memory: {
             thread: {
               id: threadId,
-              title: `WhatsApp: ${phone}`,
-              metadata: { type: 'whatsapp', phone },
+              title: threadTitle,
+              metadata: threadMetadata,
             },
             resource: resourceId,
           },
@@ -246,14 +366,23 @@ export class WhatsAppBridge {
       const reply = response.text?.trim();
       if (!reply) return;
 
-      // Chunk and send
-      const chunks = chunkText(reply, MAX_WHATSAPP_TEXT_LENGTH);
+      // Check <no-reply/> directive
+      if (containsNoReply(reply)) {
+        console.log(`[whatsapp-bridge] <no-reply/> directive — suppressing send to ${replyJid}`);
+        return;
+      }
+
+      // Strip directives and send
+      const cleanReply = stripDirectives(reply);
+      if (!cleanReply) return;
+
+      const chunks = chunkText(cleanReply, MAX_WHATSAPP_TEXT_LENGTH);
       for (const chunk of chunks) {
-        const sent = await this.socket.sendMessage(remoteJid, { text: chunk });
+        const sent = await this.socket.sendMessage(replyJid, { text: chunk });
         this.sentTracker.record(sent?.key?.id);
       }
 
-      console.log(`[whatsapp-bridge] replied to ${phone} (${reply.length} chars, ${chunks.length} chunk(s))`);
+      console.log(`[whatsapp-bridge] replied to ${phone} (${cleanReply.length} chars, ${chunks.length} chunk(s))`);
     } catch (err) {
       if (controller.signal.aborted) {
         console.log(`[whatsapp-bridge] aborted for ${phone} (new message or timeout)`);
@@ -263,7 +392,7 @@ export class WhatsAppBridge {
     } finally {
       clearTimeout(timeout);
       // Clear typing indicator (fire-and-forget — NEVER await)
-      this.socket.sendPresenceUpdate('paused', remoteJid).catch(() => {});
+      this.socket.sendPresenceUpdate('paused', replyJid).catch(() => {});
     }
   }
 
@@ -278,6 +407,40 @@ export class WhatsAppBridge {
     } catch (err) {
       console.error('[whatsapp-bridge] allowlist check failed:', err);
       return false; // fail-closed: reject if DB is down
+    }
+  }
+
+  /** Check if a group is in the allowlist. */
+  private async isGroupAllowed(groupJid: string): Promise<boolean> {
+    try {
+      const result = await this.pool.query(
+        'SELECT group_jid FROM whatsapp_groups WHERE group_jid = $1 AND enabled = true',
+        [groupJid],
+      );
+      return result.rows.length > 0;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Fetch group metadata with 5-min TTL cache. */
+  private async getGroupMeta(groupJid: string): Promise<GroupMeta> {
+    const cached = this.groupMetaCache.get(groupJid);
+    if (cached) {
+      if (Date.now() - cached.fetchedAt < GROUP_META_TTL_MS) return cached;
+      this.groupMetaCache.delete(groupJid); // evict stale entry
+    }
+
+    try {
+      const metadata = await (this.socket as any).groupMetadata(groupJid);
+      const meta: GroupMeta = {
+        name: metadata?.subject ?? groupJid,
+        fetchedAt: Date.now(),
+      };
+      this.groupMetaCache.set(groupJid, meta);
+      return meta;
+    } catch {
+      return { name: groupJid, fetchedAt: Date.now() };
     }
   }
 }

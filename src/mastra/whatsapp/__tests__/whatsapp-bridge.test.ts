@@ -8,6 +8,9 @@ import { createMockPool, type QueryStub } from '../../__test-helpers__/mock-pool
 
 const ALLOWED_JID = '1234567890@s.whatsapp.net';
 const ALLOWED_PHONE = '+1234567890';
+const GROUP_JID = '120363001234567890@g.us';
+const PARTICIPANT_JID = '1234567890@s.whatsapp.net';
+const BOT_JID = '1234567890:1@s.whatsapp.net';
 
 const allowlistStub: QueryStub = {
   match: /whatsapp_allowlist/,
@@ -31,6 +34,38 @@ function makeWAMessage(text: string, remoteJid = ALLOWED_JID) {
   };
 }
 
+function makeGroupMessage(text: string, opts?: { participant?: string; mentioned?: boolean; quoted?: string }) {
+  return {
+    key: {
+      id: `msg-${Date.now()}-${Math.random()}`,
+      remoteJid: GROUP_JID,
+      fromMe: false,
+      participant: opts?.participant ?? PARTICIPANT_JID,
+    },
+    message: {
+      extendedTextMessage: {
+        text,
+        contextInfo: {
+          mentionedJid: opts?.mentioned ? [BOT_JID] : [],
+          ...(opts?.quoted ? { quotedMessage: { conversation: opts.quoted } } : {}),
+        },
+      },
+    },
+    pushName: 'Test User',
+    messageTimestamp: Math.floor(Date.now() / 1000),
+  };
+}
+
+const groupAllowlistStub: QueryStub = {
+  match: /whatsapp_groups/,
+  result: { rows: [{ group_jid: GROUP_JID, enabled: true }] },
+};
+
+const emptyGroupAllowlistStub: QueryStub = {
+  match: /whatsapp_groups/,
+  result: { rows: [] },
+};
+
 // Track bridges for cleanup — prevents timer leaks between tests
 const activeBridges: WhatsAppBridge[] = [];
 
@@ -46,6 +81,8 @@ function createBridge(opts: {
   shouldThrow?: Error;
   presenceHangs?: boolean;
   allowed?: boolean;
+  groupAllowed?: boolean;
+  extraStubs?: QueryStub[];
 } = {}) {
   const { agent, generateCalls } = createMockAgent({
     generateResult: opts.generateResult ?? { text: 'reply' },
@@ -57,10 +94,14 @@ function createBridge(opts: {
   const { socket, sentMessages, presenceUpdates } = createMockSocket({
     presenceHangs: opts.presenceHangs,
   });
-  const { pool, queries } = createMockPool([
+  const stubs: QueryStub[] = [
     opts.allowed !== false ? allowlistStub : emptyAllowlistStub,
     pairingStub,
-  ]);
+  ];
+  if (opts.groupAllowed === true) stubs.push(groupAllowlistStub);
+  if (opts.groupAllowed === false) stubs.push(emptyGroupAllowlistStub);
+  if (opts.extraStubs) stubs.push(...opts.extraStubs);
+  const { pool, queries } = createMockPool(stubs);
 
   const bridge = new WhatsAppBridge(mastra as any, socket as any, pool as any);
   bridge.attach();
@@ -95,7 +136,8 @@ describe('message debouncing', () => {
     // Should process after debounce (2s)
     await wait(2100);
     expect(generateCalls.length).toBe(1);
-    expect(generateCalls[0].messages[0]).toEqual({ role: 'user', content: 'hello' });
+    expect(generateCalls[0].messages[0].role).toBe('user');
+    expect(generateCalls[0].messages[0].content).toContain('hello');
   });
 
   test('two rapid messages combined into single agent call', async () => {
@@ -107,7 +149,7 @@ describe('message debouncing', () => {
 
     await wait(2500);
     expect(generateCalls.length).toBe(1);
-    expect(generateCalls[0].messages[0].content).toBe('create folders\neach app can be a gh repo');
+    expect(generateCalls[0].messages[0].content).toContain('create folders\neach app can be a gh repo');
   });
 
   test('three rapid messages all combined', async () => {
@@ -121,7 +163,7 @@ describe('message debouncing', () => {
 
     await wait(2500);
     expect(generateCalls.length).toBe(1);
-    expect(generateCalls[0].messages[0].content).toBe('msg1\nmsg2\nmsg3');
+    expect(generateCalls[0].messages[0].content).toContain('msg1\nmsg2\nmsg3');
   });
 
   test('messages from different contacts are independent', async () => {
@@ -160,7 +202,7 @@ describe('abort on new message during processing', () => {
 
     // After abort + debounce, a new generate call with the second message
     expect(generateCalls.length).toBe(2);
-    expect(generateCalls[1].messages[0].content).toBe('second message');
+    expect(generateCalls[1].messages[0].content).toContain('second message');
   });
 });
 
@@ -426,7 +468,7 @@ describe('sequential message flows', () => {
     socket.ev.emit('messages.upsert', { messages: [makeWAMessage('batch 2')] });
     await wait(2500);
     expect(generateCalls.length).toBe(2);
-    expect(generateCalls[1].messages[0].content).toBe('batch 2');
+    expect(generateCalls[1].messages[0].content).toContain('batch 2');
   }, 10_000);
 
   test('multiple abort cycles work correctly', async () => {
@@ -453,14 +495,14 @@ describe('sequential message flows', () => {
     // Wait for third debounce + processing
     await wait(2500);
     expect(generateCalls.length).toBe(3);
-    expect(generateCalls[2].messages[0].content).toBe('msg C');
+    expect(generateCalls[2].messages[0].content).toContain('msg C');
   }, 15_000);
 });
 
 // ── Group and special JID filtering ──
 
 describe('JID filtering', () => {
-  test('skips group messages (@g.us)', async () => {
+  test('skips group messages from non-allowlisted groups (@g.us)', async () => {
     const { generateCalls, socket } = createBridge();
 
     socket.ev.emit('messages.upsert', {
@@ -555,6 +597,245 @@ describe('batch upsert events', () => {
 
     // Both debounced into single call (same JID, within debounce window)
     expect(generateCalls.length).toBe(1);
-    expect(generateCalls[0].messages[0].content).toBe('batch msg 1\nbatch msg 2');
+    expect(generateCalls[0].messages[0].content).toContain('batch msg 1\nbatch msg 2');
+  });
+});
+
+// ── Group message handling ──
+
+describe('group message handling', () => {
+  test('group message from allowlisted group is processed', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('hello group')] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+  });
+
+  test('group message from non-allowlisted group is ignored', async () => {
+    const { generateCalls, sentMessages, socket } = createBridge({ groupAllowed: false });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('hello group')] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(0);
+    // No pairing code sent for groups
+    expect(sentMessages.length).toBe(0);
+  });
+
+  test('group message with bot mention sends agent response to group JID', async () => {
+    const { generateCalls, sentMessages, socket } = createBridge({
+      groupAllowed: true,
+      generateResult: { text: 'group reply' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('hey @bot help', { mentioned: true })] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    expect(sentMessages.some((m) => m.jid === GROUP_JID && m.content.text === 'group reply')).toBe(true);
+  });
+
+  test('group message without mention — agent responds with <no-reply/> — suppresses send', async () => {
+    const { sentMessages, socket } = createBridge({
+      groupAllowed: true,
+      generateResult: { text: '<no-reply/>' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('random chat')] });
+    await wait(2500);
+
+    expect(sentMessages.length).toBe(0);
+  });
+
+  test('group message without mention — agent responds with text (no <no-reply/>) — text IS sent', async () => {
+    const { sentMessages, socket } = createBridge({
+      groupAllowed: true,
+      generateResult: { text: 'interesting point!' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('some discussion')] });
+    await wait(2500);
+
+    expect(sentMessages.some((m) => m.content.text === 'interesting point!')).toBe(true);
+  });
+
+  test('group debounce key uses groupJid:participant — different participants are independent', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+    const participant2 = '9999999999@s.whatsapp.net';
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('from user 1')] });
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('from user 2', { participant: participant2 })] });
+
+    await wait(2500);
+
+    // Two independent debounce keys → two separate agent calls
+    expect(generateCalls.length).toBe(2);
+  });
+
+  test('group thread ID = whatsapp-group-{groupJid} with correct metadata', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('test', { mentioned: true })] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const opts = generateCalls[0].options;
+    expect(opts.memory.thread.id).toBe(`whatsapp-group-${GROUP_JID}`);
+    expect(opts.memory.thread.metadata.type).toBe('whatsapp-group');
+  });
+});
+
+// ── Mention immediate flush ──
+
+describe('mention immediate flush', () => {
+  test('mentioned message processes faster than 2s debounce', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('hey @bot', { mentioned: true })] });
+
+    // Should process before 2s debounce window
+    await wait(500);
+    expect(generateCalls.length).toBe(1);
+  });
+
+  test('non-mentioned message still uses 2s debounce', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('just chatting')] });
+
+    // Should NOT process before debounce
+    await wait(500);
+    expect(generateCalls.length).toBe(0);
+
+    // Should process after debounce
+    await wait(2200);
+    expect(generateCalls.length).toBe(1);
+  });
+});
+
+// ── <no-reply/> directive ──
+
+describe('<no-reply/> directive', () => {
+  test('<no-reply/> in DM response — not sent', async () => {
+    const { sentMessages, socket } = createBridge({
+      generateResult: { text: '<no-reply/>' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeWAMessage('hi')] });
+    await wait(2500);
+
+    expect(sentMessages.length).toBe(0);
+  });
+
+  test('<no-reply/> in group response — not sent', async () => {
+    const { sentMessages, socket } = createBridge({
+      groupAllowed: true,
+      generateResult: { text: '<no-reply/>' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('random')] });
+    await wait(2500);
+
+    expect(sentMessages.length).toBe(0);
+  });
+
+  test('text + <no-reply/> — nothing sent (directive takes precedence)', async () => {
+    const { sentMessages, socket } = createBridge({
+      generateResult: { text: 'Some text here <no-reply/>' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeWAMessage('hi')] });
+    await wait(2500);
+
+    expect(sentMessages.length).toBe(0);
+  });
+
+  test('normal response without <no-reply/> — sent as usual', async () => {
+    const { sentMessages, socket } = createBridge({
+      generateResult: { text: 'Hello there!' },
+    });
+
+    socket.ev.emit('messages.upsert', { messages: [makeWAMessage('hi')] });
+    await wait(2500);
+
+    expect(sentMessages.some((m) => m.content.text === 'Hello there!')).toBe(true);
+  });
+});
+
+// ── Message envelope ──
+
+describe('message envelope', () => {
+  test('DM messages include <message-context> XML in agent input content', async () => {
+    const { generateCalls, socket } = createBridge();
+
+    socket.ev.emit('messages.upsert', { messages: [makeWAMessage('hello')] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(content).toContain('<message-context');
+  });
+
+  test('group messages include envelope with group info and mentioned flag', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', { messages: [makeGroupMessage('hey @bot', { mentioned: true })] });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(content).toContain('<message-context');
+    expect(content).toContain('group');
+    expect(content).toContain('mentioned');
+  });
+
+  test('quoted/reply messages include <quoted> in envelope', async () => {
+    const { generateCalls, socket } = createBridge({ groupAllowed: true });
+
+    socket.ev.emit('messages.upsert', {
+      messages: [makeGroupMessage('replying to this', { mentioned: true, quoted: 'original message text' })],
+    });
+    await wait(2500);
+
+    expect(generateCalls.length).toBe(1);
+    const content = generateCalls[0].messages[0].content;
+    expect(content).toContain('<quoted>');
+    expect(content).toContain('original message text');
+  });
+});
+
+// ── sendOutbound ──
+
+describe('sendOutbound', () => {
+  test('sends message via socket and tracks sent ID', async () => {
+    const { bridge, sentMessages } = createBridge();
+
+    await bridge.sendOutbound(ALLOWED_JID, 'outbound test');
+
+    expect(sentMessages.length).toBe(1);
+    expect(sentMessages[0].jid).toBe(ALLOWED_JID);
+    expect(sentMessages[0].content.text).toBe('outbound test');
+  });
+
+  test('chunks long messages', async () => {
+    const { bridge, sentMessages } = createBridge();
+    const longText = 'word '.repeat(1000); // ~5000 chars
+
+    await bridge.sendOutbound(ALLOWED_JID, longText);
+
+    expect(sentMessages.length).toBeGreaterThanOrEqual(2);
+    for (const msg of sentMessages) {
+      expect((msg.content.text ?? '').length).toBeLessThanOrEqual(3800);
+    }
+  });
+
+  test('returns message ID', async () => {
+    const { bridge } = createBridge();
+
+    const result = await bridge.sendOutbound(ALLOWED_JID, 'test');
+
+    expect(result).toBeDefined();
   });
 });

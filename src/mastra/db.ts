@@ -60,4 +60,13 @@ export async function initCustomTables() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS whatsapp_groups (
+      group_jid TEXT PRIMARY KEY,
+      group_name TEXT,
+      enabled BOOLEAN DEFAULT true,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
 }

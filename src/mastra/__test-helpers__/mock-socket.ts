@@ -42,6 +42,11 @@ export function createMockSocket(opts: MockSocketOptions = {}) {
         return new Promise<void>(() => {}); // never resolves
       }
     }),
+    groupMetadata: mock(async (jid: string) => ({
+      id: jid,
+      subject: 'Test Group',
+      participants: [{ id: '1234567890@s.whatsapp.net', admin: null }],
+    })),
     user: { id: '1234567890:1@s.whatsapp.net' },
   };
 
