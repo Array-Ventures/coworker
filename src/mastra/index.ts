@@ -8,7 +8,7 @@ import { serve as inngestServe } from '@mastra/inngest';
 import { coworkerAgent } from './agents/coworker-agent';
 import { coworkerMemory, INITIAL_WORKING_MEMORY } from './memory';
 import { inngest } from './inngest';
-import { initCustomTables, DB_URL } from './db';
+import { initCustomTables, DB_URL, pool } from './db';
 import { ScheduledTaskManager } from './scheduled-tasks';
 import { agentConfig, type McpServerConfig, type ApiKeyEntry } from './agent-config';
 import { WhatsAppManager } from './whatsapp/whatsapp-manager';
@@ -28,6 +28,8 @@ import {
   pollGhAuth,
   ghLogout,
 } from './gh/gh-manager';
+import { compress } from 'hono/compress';
+import { messageRouter } from './messaging/router';
 
 const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
@@ -39,6 +41,8 @@ export const mastra = new Mastra({
     host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
+      // Gzip compression — critical for Studio's 5.7 MB main.js bundle
+      compress(),
       // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
       // MCP discovery routes (/api/mcp/v0/*, /api/mcp/*/tools*) are left open.
       ...(['/api/a2a/*', '/api/.well-known/*', '/api/mcp/*'] as const).map((path) => ({
@@ -395,6 +399,38 @@ export const mastra = new Mastra({
           const id = c.req.param('id');
           await agentConfig.deleteApiKey(id);
           return c.json({ ok: true });
+        },
+      }),
+      // ── Messaging routes ──
+      registerApiRoute('/messaging/send', {
+        method: 'POST',
+        handler: async (c) => {
+          const { channel, to, text, replyTo } = await c.req.json();
+          if (!channel || !to || !text) {
+            return c.json({ ok: false, error: 'channel, to, and text are required' }, 400);
+          }
+          const result = await messageRouter.send(channel, to, text, replyTo ? { replyTo } : undefined);
+          return c.json(result, result.ok ? 200 : 502);
+        },
+      }),
+      registerApiRoute('/messaging/channels', {
+        method: 'GET',
+        handler: async (c) => {
+          const channels = messageRouter.listChannels();
+          return c.json({ channels });
+        },
+      }),
+      registerApiRoute('/messaging/groups', {
+        method: 'GET',
+        handler: async (c) => {
+          try {
+            const { rows } = await pool.query(
+              'SELECT group_jid, group_name, enabled FROM whatsapp_groups ORDER BY group_name'
+            );
+            return c.json({ groups: rows });
+          } catch {
+            return c.json({ groups: [] });
+          }
         },
       }),
       registerApiRoute('/a2a-info', {
