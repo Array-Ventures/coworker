@@ -1,6 +1,6 @@
 ---
-name: Messaging
-description: Send messages to users via WhatsApp and other connected channels. Use when asked to notify someone, send a message, reply to a contact, message a group, or proactively communicate through WhatsApp. Also provides group etiquette for observing group conversations — use `<no-reply/>` to stay silent when a response is not needed.
+name: messaging
+description: Send messages to users via WhatsApp and other connected channels. Use when asked to notify someone, send a message, reply to a contact, message a group, or proactively communicate through WhatsApp. Supports text, images, documents, audio, video, and stickers. Also provides group etiquette for observing group conversations — use `<no-reply/>` to stay silent when a response is not needed.
 ---
 
 # Messaging
@@ -19,12 +19,40 @@ Send messages through connected channels using the `msg` CLI at `/.agents/skills
 # Reply to a specific message
 /.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --reply-to "MSG_ID" "Got it!"
 
+# Send an image with caption
+/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --image /path/to/photo.jpg "Check this out"
+
+# Send a document
+/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --file /path/to/report.pdf
+
+# Send a voice note
+/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --audio /path/to/voice.ogg --ptt
+
+# Send a video with caption
+/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --video /path/to/clip.mp4 "Watch this"
+
+# Send a sticker
+/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --sticker /path/to/sticker.webp
+
 # List connected channels and their status
 /.agents/skills/messaging/scripts/msg channels
 
 # List allowlisted WhatsApp groups
 /.agents/skills/messaging/scripts/msg groups
 ```
+
+## Media Flags
+
+| Flag | Description |
+|------|-------------|
+| `--image <path>` | Send an image (JPEG, PNG, WebP, GIF) |
+| `--file <path>` | Send a document (PDF, DOCX, etc.) |
+| `--audio <path>` | Send audio (OGG, MP3, M4A) |
+| `--video <path>` | Send video (MP4, MOV) |
+| `--sticker <path>` | Send a sticker (WebP) |
+| `--ptt` | Mark audio as voice note (push-to-talk) |
+
+When using `--image`, `--file`, or `--video`, the text argument becomes the caption.
 
 ## `<no-reply/>` Directive
 
