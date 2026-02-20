@@ -17,6 +17,9 @@ export interface AgentConfigState {
   model: string
   defaultModel: string
   isCustomModel: boolean
+  instructions: string
+  defaultInstructions: string
+  isCustomInstructions: boolean
 }
 
 export interface BrainSlice {
@@ -30,6 +33,7 @@ export interface BrainSlice {
   loadBrain: () => Promise<void>
   updateBrainField: (section: 'persona' | 'org', field: string, value: string) => Promise<void>
   updateModel: (model: string | null) => Promise<void>
+  updateInstructions: (instructions: string | null) => Promise<void>
   loadObservationalMemory: () => Promise<void>
 }
 
@@ -56,6 +60,9 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           model: config.model,
           defaultModel: config.defaultModel,
           isCustomModel: config.isCustomModel,
+          instructions: config.instructions,
+          defaultInstructions: config.defaultInstructions,
+          isCustomInstructions: config.isCustomInstructions,
         },
         providers: (providerList as Provider[]).sort((a, b) => {
           if (a.connected !== b.connected) return a.connected ? -1 : 1
@@ -110,6 +117,28 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           model: config.model,
           defaultModel: config.defaultModel,
           isCustomModel: config.isCustomModel,
+          instructions: config.instructions,
+          defaultInstructions: config.defaultInstructions,
+          isCustomInstructions: config.isCustomInstructions,
+        },
+      })
+    } catch {
+      if (prev) set({ agentConfig: prev })
+    }
+  },
+
+  updateInstructions: async (instructions) => {
+    const prev = get().agentConfig
+    try {
+      const config = await updateAgentConfig({ instructions })
+      set({
+        agentConfig: {
+          model: config.model,
+          defaultModel: config.defaultModel,
+          isCustomModel: config.isCustomModel,
+          instructions: config.instructions,
+          defaultInstructions: config.defaultInstructions,
+          isCustomInstructions: config.isCustomInstructions,
         },
       })
     } catch {

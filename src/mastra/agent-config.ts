@@ -21,11 +21,16 @@ export const DEFAULT_MODEL = process.env.MODEL || 'nvidia/moonshotai/kimi-k2.5';
 
 export const DEFAULT_INSTRUCTIONS = `You are Coworker, an AI team member.
 
-# Working Memory
+# Task Execution
 
-You have working memory that persists across all conversations. It contains your identity (persona) and knowledge about the organization you work with. Use the updateWorkingMemory tool to evolve it over time — your personality, interests, learned behaviors, and organization details.
+When given a task:
+- Break it into steps and work through them one by one
+- Use tools iteratively — read, plan, execute, verify
+- Don't stop after a partial result. Keep going until the task is fully complete
+- If a tool call fails, try a different approach rather than giving up
+- For complex tasks, outline your plan first, then execute each step
 
-Update working memory when you learn something worth remembering. You don't need to update it every message — only when there's genuinely new information.`;
+When the task is done, summarize what you did.`;
 
 export class AgentConfigManager {
   async get(key: string): Promise<string | null> {

@@ -2290,6 +2290,45 @@ type UpdateStatus = {
 }
 
 function AdvancedContent() {
+  const agentConfig = useAppStore((s) => s.agentConfig)
+  const updateInstructions = useAppStore((s) => s.updateInstructions)
+  const [localInstructions, setLocalInstructions] = useState('')
+  const [savingInstructions, setSavingInstructions] = useState(false)
+  const [savedInstructions, setSavedInstructions] = useState(false)
+  const instructionsInitRef = useRef(false)
+
+  useEffect(() => {
+    if (agentConfig && !instructionsInitRef.current) {
+      setLocalInstructions(agentConfig.instructions)
+      instructionsInitRef.current = true
+    }
+  }, [agentConfig])
+
+  const instructionsDirty = agentConfig ? localInstructions !== agentConfig.instructions : false
+
+  const handleSaveInstructions = async () => {
+    setSavingInstructions(true)
+    try {
+      await updateInstructions(localInstructions)
+      setSavedInstructions(true)
+      setTimeout(() => setSavedInstructions(false), 2000)
+    } finally {
+      setSavingInstructions(false)
+    }
+  }
+
+  const handleResetInstructions = async () => {
+    setSavingInstructions(true)
+    try {
+      await updateInstructions(null)
+      setLocalInstructions(agentConfig?.defaultInstructions ?? '')
+      setSavedInstructions(true)
+      setTimeout(() => setSavedInstructions(false), 2000)
+    } finally {
+      setSavingInstructions(false)
+    }
+  }
+
   const [serverUrl, setServerUrl] = useState(MASTRA_BASE_URL)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -2332,6 +2371,42 @@ function AdvancedContent() {
 
   return (
     <div className="max-w-[480px] mx-auto flex flex-col gap-10">
+      {/* Base Instructions */}
+      {agentConfig && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-secondary text-[15px] font-medium text-foreground">Base Instructions</h3>
+            {agentConfig.isCustomInstructions && (
+              <button
+                onClick={handleResetInstructions}
+                disabled={savingInstructions}
+                className="font-secondary text-[12px] text-muted hover:text-foreground cursor-pointer bg-transparent border-none p-0"
+              >
+                Reset to default
+              </button>
+            )}
+          </div>
+          <p className="font-secondary text-[13px] text-muted mb-4">
+            System prompt that guides the agent's behavior. Changes take effect on the next message.
+          </p>
+          <textarea
+            value={localInstructions}
+            onChange={(e) => { setLocalInstructions(e.target.value); setSavedInstructions(false) }}
+            rows={8}
+            className="w-full px-3 py-2 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary resize-y"
+          />
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              onClick={handleSaveInstructions}
+              disabled={savingInstructions || !instructionsDirty}
+              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
+            >
+              {savingInstructions ? 'Saving...' : savedInstructions ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Server Connection */}
       <div>
         <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">Server Connection</h3>
