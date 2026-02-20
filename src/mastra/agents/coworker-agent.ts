@@ -30,7 +30,7 @@ function buildWorkspace() {
     sandbox: new LocalSandbox({
       workingDirectory: AGENT_PATH,
       env: {
-        PATH: process.env.PATH!,
+        PATH: `${BASE_PATH}/.bin:${process.env.PATH}`,
         HOME: GOG_HOME,
         GOG_KEYRING_BACKEND: 'file',
         GOG_KEYRING_PASSWORD: process.env.GOG_KEYRING_PASSWORD || '',

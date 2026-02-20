@@ -30,6 +30,8 @@ import {
 } from './gh/gh-manager';
 import { compress } from 'hono/compress';
 import { messageRouter } from './messaging/router';
+import fs from 'fs';
+import nodePath from 'path';
 
 const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
@@ -438,6 +440,40 @@ export const mastra = new Mastra({
             return c.json({ groups: rows });
           } catch {
             return c.json({ groups: [] });
+          }
+        },
+      }),
+      // ── Skills bin sync ──
+      registerApiRoute('/sync-skills-bin', {
+        method: 'POST',
+        handler: async (c) => {
+          const base = process.env.WORKSPACE_PATH || nodePath.resolve('./workspaces');
+          const skillsDir = nodePath.join(base, 'skills');
+          const binDir = nodePath.join(base, '.bin');
+          try {
+            fs.mkdirSync(binDir, { recursive: true });
+            // Remove old symlinks
+            for (const f of fs.readdirSync(binDir)) {
+              const p = nodePath.join(binDir, f);
+              try { if (fs.lstatSync(p).isSymbolicLink()) fs.unlinkSync(p); } catch {}
+            }
+            // Create fresh symlinks
+            let linked = 0;
+            if (fs.existsSync(skillsDir)) {
+              for (const skill of fs.readdirSync(skillsDir)) {
+                const scriptsDir = nodePath.join(skillsDir, skill, 'scripts');
+                if (!fs.existsSync(scriptsDir)) continue;
+                for (const script of fs.readdirSync(scriptsDir)) {
+                  const src = nodePath.join(scriptsDir, script);
+                  if (!fs.statSync(src).isFile()) continue;
+                  fs.symlinkSync(src, nodePath.join(binDir, script));
+                  linked++;
+                }
+              }
+            }
+            return c.json({ ok: true, linked });
+          } catch (err: any) {
+            return c.json({ ok: false, error: err.message }, 500);
           }
         },
       }),

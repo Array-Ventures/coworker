@@ -10,40 +10,40 @@ tags:
 
 # Messaging
 
-Send messages through connected channels using the `msg` CLI at `/.agents/skills/messaging/scripts/msg`.
+Send messages through connected channels using the `msg` CLI.
 
 ## CLI
 
 ```bash
 # Send a DM
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" "Hello!"
+msg send --channel whatsapp --to "+1234567890" "Hello!"
 
 # Send to a group (use the group JID)
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "120363001234@g.us" "Daily summary ready."
+msg send --channel whatsapp --to "120363001234@g.us" "Daily summary ready."
 
 # Reply to a specific message
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --reply-to "MSG_ID" "Got it!"
+msg send --channel whatsapp --to "+1234567890" --reply-to "MSG_ID" "Got it!"
 
 # Send an image with caption
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --image /path/to/photo.jpg "Check this out"
+msg send --channel whatsapp --to "+1234567890" --image /path/to/photo.jpg "Check this out"
 
 # Send a document
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --file /path/to/report.pdf
+msg send --channel whatsapp --to "+1234567890" --file /path/to/report.pdf
 
 # Send a voice note
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --audio /path/to/voice.ogg --ptt
+msg send --channel whatsapp --to "+1234567890" --audio /path/to/voice.ogg --ptt
 
 # Send a video with caption
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --video /path/to/clip.mp4 "Watch this"
+msg send --channel whatsapp --to "+1234567890" --video /path/to/clip.mp4 "Watch this"
 
 # Send a sticker
-/.agents/skills/messaging/scripts/msg send --channel whatsapp --to "+1234567890" --sticker /path/to/sticker.webp
+msg send --channel whatsapp --to "+1234567890" --sticker /path/to/sticker.webp
 
 # List connected channels and their status
-/.agents/skills/messaging/scripts/msg channels
+msg channels
 
 # List allowlisted WhatsApp groups
-/.agents/skills/messaging/scripts/msg groups
+msg groups
 ```
 
 ## Media Flags

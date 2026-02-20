@@ -354,6 +354,12 @@ export async function searchSkillsSh(q: string, limit = 30) {
   return res.json() as Promise<{ skills: SkillShBrowseItem[]; count: number }>
 }
 
+async function syncSkillsBin() {
+  try {
+    await fetch(`${MASTRA_BASE_URL}/sync-skills-bin`, { method: 'POST' })
+  } catch {}
+}
+
 export async function installSkillSh(owner: string, repo: string, skillName: string) {
   const wId = await getWorkspaceId()
   if (!wId) throw new Error('No workspace')
@@ -362,7 +368,9 @@ export async function installSkillSh(owner: string, repo: string, skillName: str
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ owner, repo, skillName }),
   })
-  return res.json()
+  const data = await res.json()
+  if (data.success) await syncSkillsBin()
+  return data
 }
 
 export async function removeSkillSh(skillName: string) {
@@ -373,7 +381,9 @@ export async function removeSkillSh(skillName: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ skillName }),
   })
-  return res.json()
+  const data = await res.json()
+  if (data.success) await syncSkillsBin()
+  return data
 }
 
 export async function fetchInstalledSkills(): Promise<{

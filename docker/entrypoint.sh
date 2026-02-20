@@ -17,5 +17,13 @@ for skill in /app/builtin-skills/*/; do
   cp -r "$skill" "$WORKSPACE/skills/$name"
 done
 
+# Symlink all skill scripts into shared .bin for PATH access
+mkdir -p "$WORKSPACE/.bin"
+rm -f "$WORKSPACE/.bin"/*
+for script in "$WORKSPACE"/skills/*/scripts/*; do
+  [ -f "$script" ] && ln -sf "$script" "$WORKSPACE/.bin/$(basename "$script")"
+done
+chown -R mastra:nodejs "$WORKSPACE/.bin"
+
 # Drop to non-root user and exec the CMD
 exec gosu mastra "$@"
