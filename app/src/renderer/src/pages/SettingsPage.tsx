@@ -807,7 +807,7 @@ function WhatsAppSection() {
         </div>
 
         {/* Allowlist items */}
-        {waAllowlist.map((entry, i) => (
+        {(waAllowlist ?? []).map((entry, i) => (
           <div
             key={entry.phoneNumber}
             className={`flex items-center justify-between ${i > 0 || true ? 'border-t border-border' : ''}`}
@@ -824,7 +824,7 @@ function WhatsAppSection() {
           </div>
         ))}
 
-        {waAllowlist.length === 0 && (
+        {(waAllowlist ?? []).length === 0 && (
           <p className="font-secondary text-[13px] text-muted-dim py-2">
             No numbers added yet. Add phone numbers that can message Coworker.
           </p>
@@ -2205,7 +2205,8 @@ function AdvancedContent() {
     try {
       await setMastraApiToken(apiToken.trim())
       setSavedToken(true)
-      setTimeout(() => setSavedToken(false), 2000)
+      // Reload after a brief delay so user sees "Saved" before refresh
+      setTimeout(() => window.location.reload(), 600)
     } finally {
       setSavingToken(false)
     }

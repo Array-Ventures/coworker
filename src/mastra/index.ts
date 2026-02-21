@@ -4,7 +4,6 @@ import { PostgresStore } from '@mastra/pg';
 import { PinoLogger } from '@mastra/loggers';
 import { chatRoute } from '@mastra/ai-sdk';
 import { registerApiRoute } from '@mastra/core/server';
-import { SimpleAuth } from '@mastra/core/server';
 import { serve as inngestServe } from '@mastra/inngest';
 import { coworkerAgent } from './agents/coworker-agent';
 import { coworkerMemory, INITIAL_WORKING_MEMORY } from './memory';
@@ -32,6 +31,8 @@ import {
 import { compress } from 'hono/compress';
 import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
+import { bearerAuth } from 'hono/bearer-auth';
+import { createMiddleware } from 'hono/factory';
 import { messageRouter } from './messaging/router';
 import fs from 'fs';
 import nodePath from 'path';
@@ -39,12 +40,26 @@ import nodePath from 'path';
 const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
 
-// ── SimpleAuth — protects ALL routes when COWORKER_API_TOKEN is set ──
-const authTokens: Record<string, { id: string }> = {};
-const apiToken = process.env.COWORKER_API_TOKEN;
-if (apiToken) {
-  authTokens[apiToken] = { id: 'owner' };
-}
+// ── Auth middleware — protects ALL routes when COWORKER_API_TOKEN is set ──
+// Using Hono bearerAuth instead of Mastra's SimpleAuth because Mastra's
+// checkRouteAuth passes null as the request to authenticateToken() on
+// built-in routes (/api/memory/*, /api/agents/*), crashing SimpleAuth.
+const COWORKER_API_TOKEN = process.env.COWORKER_API_TOKEN;
+
+const authMiddleware = COWORKER_API_TOKEN
+  ? createMiddleware(async (c, next) => {
+      // Skip auth for inngest (has its own signing key auth) and health check
+      const path = c.req.path;
+      if (path === '/api/inngest' || path === '/health' || path === '/inngest') return next();
+
+      // Also check X-Playground-Access header (used by Mastra playground)
+      const playgroundToken = c.req.header('X-Playground-Access');
+      if (playgroundToken === COWORKER_API_TOKEN) return next();
+
+      // Delegate to Hono's built-in bearerAuth for Authorization header
+      return bearerAuth({ token: COWORKER_API_TOKEN })(c, next);
+    })
+  : createMiddleware(async (_c, next) => next()); // No token = no auth (local dev)
 
 export const mastra = new Mastra({
   agents: { coworkerAgent },
@@ -52,10 +67,9 @@ export const mastra = new Mastra({
   server: {
     host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
-    ...(Object.keys(authTokens).length > 0
-      ? { auth: new SimpleAuth({ tokens: authTokens }) }
-      : {}),
     middleware: [
+      // Auth — must run before everything else
+      authMiddleware,
       // Request logging — logs method, path, status, elapsed time to stdout (Railway logs)
       logger(),
       // Server-Timing header — visible in browser DevTools → Network → Timing
@@ -68,7 +82,6 @@ export const mastra = new Mastra({
       {
         path: '/api/inngest',
         method: 'ALL',
-        requiresAuth: false,
         handler: async (c: any) => {
           const m = c.get('mastra');
           return inngestServe({ mastra: m, inngest })(c);
