@@ -5,7 +5,7 @@ import { DefaultChatTransport } from 'ai'
 import { useTheme } from './hooks/useTheme'
 import { useAppStore } from './stores/useAppStore'
 import { generateThreadId } from './stores/slices/chatSlice'
-import { AGENT_ID, RESOURCE_ID, MASTRA_BASE_URL } from './mastra-client'
+import { AGENT_ID, RESOURCE_ID, MASTRA_BASE_URL, authHeaders } from './mastra-client'
 import Sidebar from './Sidebar'
 import CommandPalette from './components/CommandPalette'
 import HomePage from './pages/HomePage'
@@ -33,6 +33,7 @@ export default function App() {
     () =>
       new DefaultChatTransport({
         api: `${MASTRA_BASE_URL}/chat/${AGENT_ID}`,
+        headers: () => authHeaders(),
         prepareSendMessagesRequest({ messages }) {
           const state = useAppStore.getState()
           return {

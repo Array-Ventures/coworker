@@ -17,6 +17,10 @@ const store = new Store({
       type: 'string',
       default: 'http://localhost:4111',
     },
+    mastraApiToken: {
+      type: 'string',
+      default: '',
+    },
   },
 })
 

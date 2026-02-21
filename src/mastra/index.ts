@@ -4,13 +4,14 @@ import { PostgresStore } from '@mastra/pg';
 import { PinoLogger } from '@mastra/loggers';
 import { chatRoute } from '@mastra/ai-sdk';
 import { registerApiRoute } from '@mastra/core/server';
+import { SimpleAuth } from '@mastra/core/server';
 import { serve as inngestServe } from '@mastra/inngest';
 import { coworkerAgent } from './agents/coworker-agent';
 import { coworkerMemory, INITIAL_WORKING_MEMORY } from './memory';
 import { inngest } from './inngest';
 import { initCustomTables, DB_URL, pool } from './db';
 import { ScheduledTaskManager } from './scheduled-tasks';
-import { agentConfig, type McpServerConfig, type ApiKeyEntry } from './agent-config';
+import { agentConfig, type McpServerConfig } from './agent-config';
 import { WhatsAppManager } from './whatsapp/whatsapp-manager';
 import { coworkerMcpServer } from './mcp/server';
 import {
@@ -38,12 +39,22 @@ import nodePath from 'path';
 const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
 
+// ── SimpleAuth — protects ALL routes when COWORKER_API_TOKEN is set ──
+const authTokens: Record<string, { id: string }> = {};
+const apiToken = process.env.COWORKER_API_TOKEN;
+if (apiToken) {
+  authTokens[apiToken] = { id: 'owner' };
+}
+
 export const mastra = new Mastra({
   agents: { coworkerAgent },
   mcpServers: { coworkerMcpServer },
   server: {
     host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
+    ...(Object.keys(authTokens).length > 0
+      ? { auth: new SimpleAuth({ tokens: authTokens }) }
+      : {}),
     middleware: [
       // Request logging — logs method, path, status, elapsed time to stdout (Railway logs)
       logger(),
@@ -51,32 +62,13 @@ export const mastra = new Mastra({
       timing(),
       // Gzip compression — skips text/event-stream (SSE) automatically since Hono v4.7+
       compress(),
-      // Protect A2A + MCP transport endpoints with API key auth (Bearer token)
-      // MCP discovery routes (/api/mcp/v0/*, /api/mcp/*/tools*) are left open.
-      ...(['/api/a2a/*', '/api/.well-known/*', '/api/mcp/*'] as const).map((path) => ({
-        path,
-        handler: async (c: any, next: any) => {
-          // Allow MCP discovery routes through without auth
-          const url = new URL(c.req.url);
-          if (url.pathname.startsWith('/api/mcp/v0/') || url.pathname.match(/^\/api\/mcp\/[^/]+\/tools/)) {
-            return next();
-          }
-          const keys = await agentConfig.getApiKeys();
-          if (keys.length === 0) return next(); // No keys = open access
-          const auth = c.req.header('Authorization');
-          const token = auth?.replace('Bearer ', '');
-          if (!token || !keys.some((k: ApiKeyEntry) => k.key === token)) {
-            return c.json({ error: 'Unauthorized' }, 401);
-          }
-          return next();
-        },
-      })),
     ],
     apiRoutes: [
       chatRoute({ path: '/chat/:agentId', sendReasoning: true, sendSources: true }),
       {
         path: '/api/inngest',
         method: 'ALL',
+        requiresAuth: false,
         handler: async (c: any) => {
           const m = c.get('mastra');
           return inngestServe({ mastra: m, inngest })(c);
@@ -376,39 +368,7 @@ export const mastra = new Mastra({
           }
         },
       }),
-      // ── API Keys & A2A Info routes ──
-      registerApiRoute('/api-keys', {
-        method: 'GET',
-        handler: async (c) => {
-          const keys = await agentConfig.getApiKeys();
-          // Truncate keys for display — only show last 4 chars
-          const safe = keys.map((k) => ({
-            ...k,
-            key: `sk-cw-${'*'.repeat(8)}...${k.key.slice(-4)}`,
-          }));
-          return c.json({ keys: safe });
-        },
-      }),
-      registerApiRoute('/api-keys', {
-        method: 'POST',
-        handler: async (c) => {
-          const { label } = await c.req.json();
-          if (!label || typeof label !== 'string') {
-            return c.json({ error: 'label is required' }, 400);
-          }
-          const entry = await agentConfig.addApiKey(label.trim());
-          // Return full key — this is the only time the client sees it
-          return c.json({ key: entry });
-        },
-      }),
-      registerApiRoute('/api-keys/:id', {
-        method: 'DELETE',
-        handler: async (c) => {
-          const id = c.req.param('id');
-          await agentConfig.deleteApiKey(id);
-          return c.json({ ok: true });
-        },
-      }),
+      // ── A2A Info route ──
       // ── Messaging routes ──
       registerApiRoute('/messaging/send', {
         method: 'POST',
@@ -486,7 +446,6 @@ export const mastra = new Mastra({
       registerApiRoute('/a2a-info', {
         method: 'GET',
         handler: async (c) => {
-          const keys = await agentConfig.getApiKeys();
           const agentId = coworkerAgent.id;
           return c.json({
             agentId,
@@ -494,7 +453,6 @@ export const mastra = new Mastra({
               a2a: `/api/a2a/${agentId}`,
               agentCard: `/api/.well-known/${agentId}/agent-card.json`,
             },
-            hasKeys: keys.length > 0,
           });
         },
       }),

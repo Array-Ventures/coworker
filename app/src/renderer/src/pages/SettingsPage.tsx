@@ -4,8 +4,8 @@ import { useAppStore } from '../stores/useAppStore'
 import { useSliceData } from '../hooks/useSliceData'
 import PageShell from '../components/PageShell'
 import FilterTabs from '../components/FilterTabs'
-import type { McpServerConfig, ApiKeyEntry, ExposedMcpServerInfo, WorkingMemory, ObservationalMemoryRecord } from '../mastra-client'
-import { MASTRA_BASE_URL, setMastraBaseUrl } from '../mastra-client'
+import type { McpServerConfig, ExposedMcpServerInfo, WorkingMemory, ObservationalMemoryRecord } from '../mastra-client'
+import { MASTRA_BASE_URL, setMastraBaseUrl, setMastraApiToken, authHeaders } from '../mastra-client'
 
 import type { AgentConfigState, Provider } from '../stores/slices/brainSlice'
 
@@ -1507,9 +1507,9 @@ function TestButton({ url, method = 'GET', body }: { url: string; method?: 'GET'
     setState('testing')
     setErrorMsg('')
     try {
-      const opts: RequestInit = { method }
+      const opts: RequestInit = { method, headers: authHeaders() }
       if (method === 'POST' && body) {
-        opts.headers = { 'Content-Type': 'application/json' }
+        opts.headers = { ...authHeaders(), 'Content-Type': 'application/json' }
         opts.body = JSON.stringify(body)
       }
       const res = await fetch(url, opts)
@@ -1581,166 +1581,6 @@ function A2aEndpointCard() {
   )
 }
 
-function ApiKeyCard({
-  entry,
-  isNew,
-  fullKey,
-  onDismissNew,
-  onDelete,
-}: {
-  entry: ApiKeyEntry
-  isNew?: boolean
-  fullKey?: string
-  onDismissNew?: () => void
-  onDelete: () => void
-}) {
-  return (
-    <div className={`bg-card border rounded-xl ${isNew ? 'border-primary' : 'border-border'}`} style={{ padding: '14px 16px' }}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="font-secondary text-[14px] font-medium text-foreground">{entry.label}</span>
-          <span className="font-secondary text-[12px] text-muted-dim">
-            {new Date(entry.createdAt).toLocaleDateString()}
-          </span>
-        </div>
-        <button
-          onClick={onDelete}
-          className="flex items-center justify-center text-muted hover:text-red-500 transition-colors"
-          style={{ width: 28, height: 28 }}
-          title="Delete key"
-        >
-          <span className="material-icon" style={{ fontSize: 16 }}>delete</span>
-        </button>
-      </div>
-      {isNew && fullKey ? (
-        <div>
-          <div className="flex items-center gap-2">
-            <code className="font-mono text-[13px] text-foreground bg-sidebar rounded-md flex-1 truncate" style={{ padding: '6px 10px' }}>
-              {fullKey}
-            </code>
-            <CopyButton value={fullKey} />
-          </div>
-          <p className="font-secondary text-[11px] text-amber-600 dark:text-amber-400 mt-2">
-            Copy this key now — you won't be able to see it again.
-          </p>
-          <button
-            onClick={onDismissNew}
-            className="font-secondary text-[12px] text-muted hover:text-foreground mt-1 transition-colors"
-          >
-            Dismiss
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center gap-2">
-          <code className="font-mono text-[13px] text-muted-dim bg-sidebar rounded-md flex-1" style={{ padding: '6px 10px' }}>
-            {entry.key}
-          </code>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function ApiKeysSection() {
-  const apiKeys = useAppStore((s) => s.apiKeys)
-  const a2aLoaded = useAppStore((s) => s.a2aLoaded)
-  const loadA2aData = useAppStore((s) => s.loadA2aData)
-  const addApiKey = useAppStore((s) => s.addApiKey)
-  const removeApiKey = useAppStore((s) => s.removeApiKey)
-
-  const [newKey, setNewKey] = useState<{ entry: ApiKeyEntry; fullKey: string } | null>(null)
-  const [generating, setGenerating] = useState(false)
-
-  useSliceData(loadA2aData)
-
-  const handleGenerate = async () => {
-    setGenerating(true)
-    try {
-      const label = `Key ${apiKeys.length + 1}`
-      const entry = await addApiKey(label)
-      setNewKey({ entry, fullKey: entry.key })
-    } catch {
-      // silently fail
-    } finally {
-      setGenerating(false)
-    }
-  }
-
-  return (
-    <>
-      <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
-        <div>
-          <h4 className="font-secondary text-[16px] font-semibold text-foreground mb-0.5">
-            API Keys
-          </h4>
-          <p className="font-secondary text-[13px] text-muted">
-            Create keys to authenticate external access to your agent.
-          </p>
-        </div>
-        {apiKeys.length > 0 && (
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-1.5 font-secondary text-[13px] font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors shrink-0 disabled:opacity-50"
-            style={{ height: 36, padding: '0 16px' }}
-          >
-            {generating ? (
-              <span className="material-icon animate-spin" style={{ fontSize: 16 }}>progress_activity</span>
-            ) : (
-              <span className="material-icon" style={{ fontSize: 16 }}>add</span>
-            )}
-            Generate Key
-          </button>
-        )}
-      </div>
-
-      {apiKeys.length > 0 || newKey ? (
-        <div className="flex flex-col" style={{ gap: 8 }}>
-          {newKey && (
-            <ApiKeyCard
-              entry={newKey.entry}
-              isNew
-              fullKey={newKey.fullKey}
-              onDismissNew={() => setNewKey(null)}
-              onDelete={() => {
-                removeApiKey(newKey.entry.id)
-                setNewKey(null)
-              }}
-            />
-          )}
-          {apiKeys
-            .filter((k) => !newKey || k.id !== newKey.entry.id)
-            .map((k) => (
-              <ApiKeyCard key={k.id} entry={k} onDelete={() => removeApiKey(k.id)} />
-            ))}
-        </div>
-      ) : (
-        <div className="bg-card border border-border rounded-xl flex flex-col items-center justify-center text-center" style={{ padding: '40px 20px' }}>
-          <span className="material-icon text-muted-dim mb-3" style={{ fontSize: 36 }}>vpn_key</span>
-          <p className="font-secondary text-[14px] font-medium text-foreground mb-1">No API keys</p>
-          <p className="font-secondary text-[13px] text-muted-dim mb-4" style={{ maxWidth: 320 }}>
-            Generate your first key to enable authenticated access.
-          </p>
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="flex items-center gap-1.5 font-secondary text-[13px] font-semibold bg-primary text-primary-foreground rounded-lg hover:bg-primary-hover transition-colors disabled:opacity-50"
-            style={{ height: 36, padding: '0 16px' }}
-          >
-            Generate Key
-          </button>
-        </div>
-      )}
-
-      {apiKeys.length > 0 && (
-        <p className="font-secondary text-[12px] text-muted-dim">
-          Endpoints require a Bearer token when API keys exist. Without keys, endpoints are open.
-        </p>
-      )}
-    </>
-  )
-}
-
 function A2aSection() {
   return (
     <div className="max-w-[640px] mx-auto flex flex-col" style={{ gap: 12 }}>
@@ -1753,7 +1593,6 @@ function A2aSection() {
         </p>
       </div>
       <A2aEndpointCard />
-      <ApiKeysSection />
     </div>
   )
 }
@@ -2330,12 +2169,17 @@ function AdvancedContent() {
   }
 
   const [serverUrl, setServerUrl] = useState(MASTRA_BASE_URL)
+  const [apiToken, setApiToken] = useState('')
+  const [showToken, setShowToken] = useState(false)
+  const [savingToken, setSavingToken] = useState(false)
+  const [savedToken, setSavedToken] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
   const [appVersion, setAppVersion] = useState('dev')
 
   useEffect(() => {
+    ;(window as any).settings?.get('mastraApiToken')?.then((v: string) => v && setApiToken(v))
     ;(window as any).updater?.getAppVersion?.().then((v: string) => v && setAppVersion(v))
     const unsub = (window as any).updater?.onUpdateStatus?.((data: any) => {
       setUpdateStatus(data)
@@ -2353,6 +2197,17 @@ function AdvancedContent() {
       setTimeout(() => setSaved(false), 2000)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveToken = async () => {
+    setSavingToken(true)
+    try {
+      await setMastraApiToken(apiToken.trim())
+      setSavedToken(true)
+      setTimeout(() => setSavedToken(false), 2000)
+    } finally {
+      setSavingToken(false)
     }
   }
 
@@ -2434,6 +2289,39 @@ function AdvancedContent() {
             Server URL updated. Reload the app for all connections to use the new URL.
           </p>
         )}
+        <div className="mt-4">
+          <p className="font-secondary text-[13px] text-muted mb-2">
+            API Token (for authenticated remote servers)
+          </p>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                type={showToken ? 'text' : 'password'}
+                value={apiToken}
+                onChange={(e) => { setApiToken(e.target.value); setSavedToken(false) }}
+                placeholder="Paste your COWORKER_API_TOKEN here"
+                className="w-full h-10 px-3 pr-10 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary"
+              />
+              <button
+                onClick={() => setShowToken(!showToken)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center text-muted hover:text-foreground transition-colors"
+                style={{ width: 28, height: 28 }}
+                title={showToken ? 'Hide token' : 'Show token'}
+              >
+                <span className="material-icon" style={{ fontSize: 16 }}>
+                  {showToken ? 'visibility_off' : 'visibility'}
+                </span>
+              </button>
+            </div>
+            <button
+              onClick={handleSaveToken}
+              disabled={savingToken}
+              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
+            >
+              {savingToken ? 'Saving...' : savedToken ? 'Saved' : 'Save'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* App Updates */}

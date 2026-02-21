@@ -18,24 +18,42 @@ export type InstalledSkillInfo = {
 const DEFAULT_BASE_URL = 'http://localhost:4111'
 
 export let MASTRA_BASE_URL = DEFAULT_BASE_URL
+let MASTRA_API_TOKEN = ''
 
 export const AGENT_ID = 'coworker'
 export const RESOURCE_ID = 'coworker'
+
+/** Returns auth headers when a token is configured, empty object otherwise */
+export function authHeaders(): HeadersInit {
+  if (!MASTRA_API_TOKEN) return {}
+  return { Authorization: `Bearer ${MASTRA_API_TOKEN}` }
+}
+
+function rebuildClient() {
+  mastraClient = new MastraClient({
+    baseUrl: MASTRA_BASE_URL,
+    ...(MASTRA_API_TOKEN ? { headers: { Authorization: `Bearer ${MASTRA_API_TOKEN}` } } : {}),
+  })
+}
 
 export let mastraClient = new MastraClient({
   baseUrl: MASTRA_BASE_URL,
 })
 
-/** Load persisted server URL from electron-store (call once on app init) */
+/** Load persisted server URL + token from electron-store (call once on app init) */
 export async function initMastraBaseUrl(): Promise<string> {
   try {
-    const saved = await (window as any).settings?.get('mastraBaseUrl')
-    if (saved && typeof saved === 'string') {
-      MASTRA_BASE_URL = saved
-      mastraClient = new MastraClient({ baseUrl: saved })
+    const savedUrl = await (window as any).settings?.get('mastraBaseUrl')
+    if (savedUrl && typeof savedUrl === 'string') {
+      MASTRA_BASE_URL = savedUrl
     }
+    const savedToken = await (window as any).settings?.get('mastraApiToken')
+    if (savedToken && typeof savedToken === 'string') {
+      MASTRA_API_TOKEN = savedToken
+    }
+    rebuildClient()
   } catch {
-    // electron-store not available — keep default
+    // electron-store not available — keep defaults
   }
   return MASTRA_BASE_URL
 }
@@ -43,9 +61,20 @@ export async function initMastraBaseUrl(): Promise<string> {
 /** Update the server URL and persist it */
 export async function setMastraBaseUrl(url: string): Promise<void> {
   MASTRA_BASE_URL = url
-  mastraClient = new MastraClient({ baseUrl: url })
+  rebuildClient()
   try {
     await (window as any).settings?.set('mastraBaseUrl', url)
+  } catch {
+    // ignore if not in Electron
+  }
+}
+
+/** Update the API token and persist it */
+export async function setMastraApiToken(token: string): Promise<void> {
+  MASTRA_API_TOKEN = token
+  rebuildClient()
+  try {
+    await (window as any).settings?.set('mastraApiToken', token)
   } catch {
     // ignore if not in Electron
   }
@@ -146,7 +175,7 @@ export async function fetchAIProviders() {
 }
 
 export async function fetchAgentConfig() {
-  const res = await fetch(`${MASTRA_BASE_URL}/agent-config`)
+  const res = await fetch(`${MASTRA_BASE_URL}/agent-config`, { headers: authHeaders() })
   return res.json()
 }
 
@@ -156,7 +185,7 @@ export async function updateAgentConfig(body: {
 }) {
   const res = await fetch(`${MASTRA_BASE_URL}/agent-config`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return res.json()
@@ -229,7 +258,7 @@ export interface ScheduledTask {
 }
 
 export async function fetchScheduledTasks(): Promise<ScheduledTask[]> {
-  const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks`)
+  const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks`, { headers: authHeaders() })
   const data = await res.json()
   return data.items
 }
@@ -242,7 +271,7 @@ export async function createScheduledTask(body: {
 }) {
   const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return res.json()
@@ -251,6 +280,7 @@ export async function createScheduledTask(body: {
 export async function deleteScheduledTask(id: string) {
   const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks/${id}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   })
   return res.json()
 }
@@ -261,7 +291,7 @@ export async function updateScheduledTask(
 ) {
   const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   return res.json()
@@ -270,7 +300,7 @@ export async function updateScheduledTask(
 export async function toggleScheduledTask(id: string, enabled: boolean) {
   const res = await fetch(`${MASTRA_BASE_URL}/scheduled-tasks/${id}/toggle`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled }),
   })
   return res.json()
@@ -321,13 +351,13 @@ export interface McpRegistryResponse {
 export async function fetchRegistryMcps(limit = 20, cursor?: string): Promise<McpRegistryResponse> {
   const params = new URLSearchParams({ limit: String(limit), version: 'latest' })
   if (cursor) params.set('cursor', cursor)
-  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`)
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`, { headers: authHeaders() })
   return res.json()
 }
 
 export async function searchRegistryMcps(q: string, limit = 30): Promise<McpRegistryResponse> {
   const params = new URLSearchParams({ search: q, limit: String(limit), version: 'latest' })
-  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`)
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-registry/servers?${params}`, { headers: authHeaders() })
   return res.json()
 }
 
@@ -341,6 +371,7 @@ export async function fetchPopularSkills(limit = 20, offset = 0) {
   if (!wId) return { skills: [] as SkillShBrowseItem[], count: 0 }
   const res = await fetch(
     `${MASTRA_BASE_URL}/api/workspaces/${wId}/skills-sh/popular?limit=${limit}&offset=${offset}`,
+    { headers: authHeaders() },
   )
   return res.json() as Promise<{ skills: SkillShBrowseItem[]; count: number }>
 }
@@ -350,13 +381,14 @@ export async function searchSkillsSh(q: string, limit = 30) {
   if (!wId) return { skills: [] as SkillShBrowseItem[], count: 0 }
   const res = await fetch(
     `${MASTRA_BASE_URL}/api/workspaces/${wId}/skills-sh/search?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { headers: authHeaders() },
   )
   return res.json() as Promise<{ skills: SkillShBrowseItem[]; count: number }>
 }
 
 async function syncSkillsBin() {
   try {
-    await fetch(`${MASTRA_BASE_URL}/sync-skills-bin`, { method: 'POST' })
+    await fetch(`${MASTRA_BASE_URL}/sync-skills-bin`, { method: 'POST', headers: authHeaders() })
   } catch {}
 }
 
@@ -365,7 +397,7 @@ export async function installSkillSh(owner: string, repo: string, skillName: str
   if (!wId) throw new Error('No workspace')
   const res = await fetch(`${MASTRA_BASE_URL}/api/workspaces/${wId}/skills-sh/install`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ owner, repo, skillName }),
   })
   const data = await res.json()
@@ -378,7 +410,7 @@ export async function removeSkillSh(skillName: string) {
   if (!wId) throw new Error('No workspace')
   const res = await fetch(`${MASTRA_BASE_URL}/api/workspaces/${wId}/skills-sh/remove`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ skillName }),
   })
   const data = await res.json()
@@ -409,7 +441,7 @@ export interface GogAccount {
 }
 
 export async function fetchGogStatus(): Promise<{ installed: boolean; configured: boolean; accounts: GogAccount[] }> {
-  const res = await fetch(`${MASTRA_BASE_URL}/gog/status`)
+  const res = await fetch(`${MASTRA_BASE_URL}/gog/status`, { headers: authHeaders() })
   return res.json()
 }
 
@@ -419,7 +451,7 @@ export async function startGogAuth(
 ): Promise<{ authUrl: string }> {
   const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/start`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, services }),
   })
   return res.json()
@@ -432,7 +464,7 @@ export async function completeGogAuth(
 ): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/complete`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, redirectUrl, services }),
   })
   return res.json()
@@ -441,7 +473,7 @@ export async function completeGogAuth(
 export async function testGogAccount(email: string): Promise<{ ok: boolean; error?: string }> {
   const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/test`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
   return res.json()
@@ -450,7 +482,7 @@ export async function testGogAccount(email: string): Promise<{ ok: boolean; erro
 export async function removeGogAccount(email: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${MASTRA_BASE_URL}/gog/auth/remove`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
   return res.json()
@@ -459,12 +491,12 @@ export async function removeGogAccount(email: string): Promise<{ ok: boolean }> 
 // ── GitHub (gh CLI) ──
 
 export async function fetchGhStatus(): Promise<{ installed: boolean; loggedIn: boolean; username: string | null }> {
-  const res = await fetch(`${MASTRA_BASE_URL}/gh/status`)
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/status`, { headers: authHeaders() })
   return res.json()
 }
 
 export async function ghStartAuth(): Promise<{ userCode: string; authUrl: string }> {
-  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/start`, { method: 'POST' })
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/start`, { method: 'POST', headers: authHeaders() })
   if (!res.ok) {
     const data = await res.json().catch(() => ({ error: 'Failed to start auth' }))
     throw new Error(data.error || 'Failed to start auth')
@@ -473,12 +505,12 @@ export async function ghStartAuth(): Promise<{ userCode: string; authUrl: string
 }
 
 export async function ghPollAuth(): Promise<{ ok: boolean; username?: string; error?: string }> {
-  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/poll`, { method: 'POST' })
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/poll`, { method: 'POST', headers: authHeaders() })
   return res.json()
 }
 
 export async function ghLogout(): Promise<{ ok: boolean; error?: string }> {
-  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/logout`, { method: 'POST' })
+  const res = await fetch(`${MASTRA_BASE_URL}/gh/auth/logout`, { method: 'POST', headers: authHeaders() })
   return res.json()
 }
 
@@ -497,26 +529,26 @@ export interface AllowlistEntry {
 }
 
 export async function fetchWhatsAppStatus(): Promise<WhatsAppStatus> {
-  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/status`)
+  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/status`, { headers: authHeaders() })
   return res.json()
 }
 
 export async function connectWhatsApp(): Promise<WhatsAppStatus> {
-  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/connect`, { method: 'POST' })
+  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/connect`, { method: 'POST', headers: authHeaders() })
   return res.json()
 }
 
 export async function disconnectWhatsApp(): Promise<WhatsAppStatus> {
-  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/disconnect`, { method: 'POST' })
+  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/disconnect`, { method: 'POST', headers: authHeaders() })
   return res.json()
 }
 
 export async function logoutWhatsApp(): Promise<void> {
-  await fetch(`${MASTRA_BASE_URL}/whatsapp/logout`, { method: 'POST' })
+  await fetch(`${MASTRA_BASE_URL}/whatsapp/logout`, { method: 'POST', headers: authHeaders() })
 }
 
 export async function fetchWhatsAppAllowlist(): Promise<AllowlistEntry[]> {
-  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/allowlist`)
+  const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/allowlist`, { headers: authHeaders() })
   const data = await res.json()
   return data.items
 }
@@ -527,7 +559,7 @@ export async function addToWhatsAppAllowlist(
 ): Promise<AllowlistEntry[]> {
   const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/allowlist`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ phoneNumber, label }),
   })
   const data = await res.json()
@@ -537,6 +569,7 @@ export async function addToWhatsAppAllowlist(
 export async function removeFromWhatsAppAllowlist(phoneNumber: string): Promise<void> {
   await fetch(`${MASTRA_BASE_URL}/whatsapp/allowlist/${encodeURIComponent(phoneNumber)}`, {
     method: 'DELETE',
+    headers: authHeaders(),
   })
 }
 
@@ -545,7 +578,7 @@ export async function approveWhatsAppPairing(
 ): Promise<{ ok: boolean; error?: string; items?: AllowlistEntry[] }> {
   const res = await fetch(`${MASTRA_BASE_URL}/whatsapp/pair`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ code }),
   })
   return res.json()
@@ -566,7 +599,7 @@ export interface McpServerConfig {
 }
 
 export async function fetchMcpServers(): Promise<McpServerConfig[]> {
-  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers`)
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers`, { headers: authHeaders() })
   const data = await res.json()
   return data.servers
 }
@@ -574,7 +607,7 @@ export async function fetchMcpServers(): Promise<McpServerConfig[]> {
 export async function saveMcpServers(servers: McpServerConfig[]): Promise<McpServerConfig[]> {
   const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify({ servers }),
   })
   const data = await res.json()
@@ -586,7 +619,7 @@ export async function testMcpServer(
 ): Promise<{ ok: boolean; tools?: string[]; error?: string }> {
   const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/test`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
   })
   return res.json()
@@ -603,12 +636,12 @@ export interface ExposedMcpServerInfo {
 }
 
 export async function fetchExposedMcpServers(): Promise<ExposedMcpServerInfo[]> {
-  const res = await fetch(`${MASTRA_BASE_URL}/api/mcp/v0/servers`)
+  const res = await fetch(`${MASTRA_BASE_URL}/api/mcp/v0/servers`, { headers: authHeaders() })
   const data = await res.json()
   return Promise.all(
     (data.servers || []).map(async (srv: any) => {
       try {
-        const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`)
+        const toolsRes = await fetch(`${MASTRA_BASE_URL}/api/mcp/${srv.id}/tools`, { headers: authHeaders() })
         const toolsData = await toolsRes.json()
         const toolsList = Array.isArray(toolsData.tools)
           ? toolsData.tools.map((t: any) => ({ name: t.name || t.id, description: t.description }))
@@ -624,42 +657,14 @@ export async function fetchExposedMcpServers(): Promise<ExposedMcpServerInfo[]> 
   )
 }
 
-// ── API Keys & A2A ──
-
-export interface ApiKeyEntry {
-  id: string
-  label: string
-  key: string
-  createdAt: string
-}
+// ── A2A Info ──
 
 export interface A2aInfo {
   agentId: string
   endpoints: { a2a: string; agentCard: string }
-  hasKeys: boolean
-}
-
-export async function fetchApiKeys(): Promise<ApiKeyEntry[]> {
-  const res = await fetch(`${MASTRA_BASE_URL}/api-keys`)
-  const data = await res.json()
-  return data.keys
-}
-
-export async function generateApiKey(label: string): Promise<ApiKeyEntry> {
-  const res = await fetch(`${MASTRA_BASE_URL}/api-keys`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label }),
-  })
-  const data = await res.json()
-  return data.key
-}
-
-export async function deleteApiKey(id: string): Promise<void> {
-  await fetch(`${MASTRA_BASE_URL}/api-keys/${id}`, { method: 'DELETE' })
 }
 
 export async function fetchA2aInfo(): Promise<A2aInfo> {
-  const res = await fetch(`${MASTRA_BASE_URL}/a2a-info`)
+  const res = await fetch(`${MASTRA_BASE_URL}/a2a-info`, { headers: authHeaders() })
   return res.json()
 }

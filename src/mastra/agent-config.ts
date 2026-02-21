@@ -1,6 +1,5 @@
 import { pool } from './db';
 import { MCPClient } from '@mastra/mcp';
-import crypto from 'crypto';
 
 export interface McpServerConfig {
   id: string;
@@ -175,44 +174,6 @@ export class AgentConfigManager {
       return {};
     }
   }
-  // ── API Keys ──
-
-  async getApiKeys(): Promise<ApiKeyEntry[]> {
-    const raw = await this.get('api_keys');
-    if (!raw) return [];
-    try { return JSON.parse(raw); } catch { return []; }
-  }
-
-  async addApiKey(label: string): Promise<ApiKeyEntry> {
-    const keys = await this.getApiKeys();
-    const entry: ApiKeyEntry = {
-      id: crypto.randomUUID(),
-      label,
-      key: 'sk-cw-' + crypto.randomBytes(24).toString('hex'),
-      createdAt: new Date().toISOString(),
-    };
-    keys.push(entry);
-    await this.set('api_keys', JSON.stringify(keys));
-    return entry;
-  }
-
-  async deleteApiKey(id: string): Promise<void> {
-    const keys = await this.getApiKeys();
-    const filtered = keys.filter((k) => k.id !== id);
-    await this.set('api_keys', JSON.stringify(filtered));
-  }
-
-  async validateApiKey(key: string): Promise<boolean> {
-    const keys = await this.getApiKeys();
-    return keys.some((k) => k.key === key);
-  }
-}
-
-export interface ApiKeyEntry {
-  id: string;
-  label: string;
-  key: string;
-  createdAt: string;
 }
 
 export const agentConfig = new AgentConfigManager();
