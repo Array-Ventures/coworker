@@ -102,6 +102,7 @@ export class WhatsAppManager {
                 connected: this.state.status === 'connected',
                 account: this.state.connectedPhone ?? undefined,
               }),
+              pool,
             ));
           }
 
