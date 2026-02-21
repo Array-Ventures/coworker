@@ -80,12 +80,15 @@ export async function setMastraApiToken(token: string): Promise<void> {
   }
 }
 
-export async function fetchThreads() {
+export async function fetchThreadsPage(page = 0, perPage = 100) {
   const result = await mastraClient.listMemoryThreads({
     agentId: AGENT_ID,
     resourceId: RESOURCE_ID,
+    perPage,
+    page,
+    sortDirection: 'DESC',
   })
-  return result.threads
+  return { threads: result.threads as StorageThreadType[], hasMore: result.hasMore }
 }
 
 export async function fetchThread(threadId: string): Promise<StorageThreadType> {
@@ -96,15 +99,16 @@ export async function fetchThread(threadId: string): Promise<StorageThreadType> 
   return thread.get()
 }
 
-export async function fetchThreadMessages(threadId: string) {
+export async function fetchThreadMessages(threadId: string, page = 0, perPage = 40) {
   const thread = mastraClient.getMemoryThread({
     threadId,
     agentId: AGENT_ID,
   })
-  const result = await thread.listMessages({
-    orderBy: { field: 'createdAt', direction: 'ASC' },
+  return thread.listMessages({
+    page,
+    perPage,
+    orderBy: { field: 'createdAt', direction: 'DESC' },
   })
-  return result.messages
 }
 
 export async function updateThreadTitle(threadId: string, title: string) {

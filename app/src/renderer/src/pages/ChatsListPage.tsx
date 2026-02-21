@@ -18,6 +18,7 @@ const filterOptions = [
 export default memo(function ChatsListPage() {
   const threads = useAppStore((s) => s.threads)
   const threadsLoaded = useAppStore((s) => s.threadsLoaded)
+  const threadsFullyLoaded = useAppStore((s) => s.threadsFullyLoaded)
   const loadThreads = useAppStore((s) => s.loadThreads)
   const openThread = useAppStore((s) => s.openThread)
   const deleteThread = useAppStore((s) => s.deleteThread)
@@ -128,6 +129,9 @@ export default memo(function ChatsListPage() {
                 </div>
               </div>
             ))
+          )}
+          {threadsLoaded && !threadsFullyLoaded && (
+            <div className="text-muted-dim text-xs text-center py-4">Loading more conversations...</div>
           )}
         </div>
       </div>

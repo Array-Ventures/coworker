@@ -138,6 +138,7 @@ export default function App() {
         {currentPage === 'active-chat' && (
           <ActiveChatPage
             messages={messages}
+            setMessages={setMessages}
             onSend={handleSendInChat}
             onStop={stop}
             error={error}

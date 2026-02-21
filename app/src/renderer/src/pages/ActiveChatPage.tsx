@@ -9,6 +9,7 @@ import ThreadSwitcher from '../components/ThreadSwitcher'
 
 type ActiveChatPageProps = {
   messages: UIMessage[]
+  setMessages: (messages: UIMessage[]) => void
   onSend: () => void
   onStop: () => void
   error?: Error
@@ -20,6 +21,7 @@ type ActiveChatPageProps = {
 
 export default memo(function ActiveChatPage({
   messages,
+  setMessages,
   onSend,
   onStop,
   error,
@@ -35,16 +37,60 @@ export default memo(function ActiveChatPage({
   const updateTitle = useAppStore((s) => s.updateTitle)
   const deleteThread = useAppStore((s) => s.deleteThread)
   const threadId = useAppStore((s) => s.threadId)
+  const messagesHasMore = useAppStore((s) => s.messagesHasMore)
+  const loadingOlderMessages = useAppStore((s) => s.loadingOlderMessages)
+  const loadOlderMessages = useAppStore((s) => s.loadOlderMessages)
 
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const [showSwitcher, setShowSwitcher] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const topSentinelRef = useRef<HTMLDivElement>(null)
+  const prevMessagesLenRef = useRef(0)
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
 
+  // Auto-scroll to bottom on new messages (but not when loading older)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length > prevMessagesLenRef.current || prevMessagesLenRef.current === 0) {
+      const container = scrollContainerRef.current
+      if (container) {
+        const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150
+        if (nearBottom || prevMessagesLenRef.current === 0) {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+        }
+      }
+    }
+    prevMessagesLenRef.current = messages.length
   }, [messages])
+
+  // Scroll-up loading — fetch older messages when top sentinel is visible
+  useEffect(() => {
+    const el = topSentinelRef.current
+    const container = scrollContainerRef.current
+    if (!el || !container || !messagesHasMore) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return
+        const prevScrollHeight = container.scrollHeight
+        loadOlderMessages().then((olderMessages) => {
+          if (olderMessages && olderMessages.length > 0) {
+            setMessages([...olderMessages, ...messagesRef.current])
+            // Preserve scroll position after prepending
+            requestAnimationFrame(() => {
+              container.scrollTop = container.scrollHeight - prevScrollHeight
+            })
+          }
+        })
+      },
+      { root: container, rootMargin: '100px 0px 0px 0px' },
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [messagesHasMore, loadOlderMessages, setMessages])
 
   const startEditing = useCallback(() => {
     setEditValue(threadTitle || '')
@@ -139,7 +185,14 @@ export default memo(function ActiveChatPage({
         )}
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto px-12 py-8 flex flex-col gap-6 min-h-0">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 flex flex-col gap-6 min-h-0">
+          {messagesHasMore && (
+            <div ref={topSentinelRef} className="flex justify-center py-2">
+              {loadingOlderMessages && (
+                <span className="text-muted-dim text-sm font-secondary">Loading older messages...</span>
+              )}
+            </div>
+          )}
           {messages.length === 0 && !switchingThread && (
             <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
               Send a message to start coding with your agent.

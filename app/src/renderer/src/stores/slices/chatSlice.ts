@@ -14,18 +14,23 @@ export function generateThreadId() {
   return `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-/** Shared fetch: load messages + thread metadata */
+const MESSAGES_PER_PAGE = 40
+
+/** Shared fetch: load first page of messages + thread metadata */
 async function loadThread(threadId: string) {
-  const [serverMessages, threadData]: [
+  const [msgResult, threadData]: [
     Awaited<ReturnType<typeof fetchThreadMessages>>,
     StorageThreadType,
   ] = await Promise.all([
-    fetchThreadMessages(threadId),
+    fetchThreadMessages(threadId, 0, MESSAGES_PER_PAGE),
     fetchThread(threadId),
   ])
+  // Messages fetched DESC (newest first) — reverse for display (oldest first)
+  const messages = serverMessagesToUIMessages([...msgResult.messages].reverse())
   return {
-    messages: serverMessagesToUIMessages(serverMessages),
+    messages,
     title: threadData.title || 'New Chat',
+    messagesHasMore: msgResult.hasMore,
   }
 }
 
@@ -37,6 +42,9 @@ export interface ChatSlice {
   input: string
   stagedFiles: FileUIPart[]
   pendingLoad: { messages: UIMessage[]; title: string } | null
+  messagesPage: number
+  messagesHasMore: boolean
+  loadingOlderMessages: boolean
 
   // Setters
   setInput: (value: string) => void
@@ -51,6 +59,7 @@ export interface ChatSlice {
   refreshThreadTitle: () => void
   updateTitle: (title: string) => Promise<void>
   deleteThread: (threadId: string) => Promise<void>
+  loadOlderMessages: () => Promise<UIMessage[] | null>
 }
 
 export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, get) => ({
@@ -61,6 +70,9 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
   input: '',
   stagedFiles: [],
   pendingLoad: null,
+  messagesPage: 0,
+  messagesHasMore: false,
+  loadingOlderMessages: false,
 
   setInput: (value) => set({ input: value }),
   setThreadTitle: (title) => set({ threadTitle: title }),
@@ -72,10 +84,22 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     const { threadId, currentPage } = get()
     if (openThreadId === threadId && currentPage === 'active-chat') return
 
-    set({ switchingThread: true, threadId: openThreadId, currentPage: 'active-chat', pendingLoad: null })
+    set({
+      switchingThread: true,
+      threadId: openThreadId,
+      currentPage: 'active-chat',
+      pendingLoad: null,
+      messagesPage: 0,
+      messagesHasMore: false,
+      loadingOlderMessages: false,
+    })
     try {
       const data = await loadThread(openThreadId)
-      set({ threadTitle: data.title, pendingLoad: data })
+      set({
+        threadTitle: data.title,
+        pendingLoad: data,
+        messagesHasMore: data.messagesHasMore,
+      })
     } catch (err) {
       console.error('Failed to load thread:', err)
       set({ switchingThread: false })
@@ -87,6 +111,9 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     threadTitle: undefined,
     currentPage: 'active-chat',
     pendingLoad: null,
+    messagesPage: 0,
+    messagesHasMore: false,
+    loadingOlderMessages: false,
   }),
 
   refreshThreadTitle: async () => {
@@ -129,6 +156,29 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     } catch (err) {
       console.error('Failed to delete thread:', err)
       set({ threads: prevThreads })
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const { threadId, messagesHasMore, loadingOlderMessages } = get()
+    if (!threadId || !messagesHasMore || loadingOlderMessages) return null
+
+    set({ loadingOlderMessages: true })
+    try {
+      const nextPage = get().messagesPage + 1
+      const result = await fetchThreadMessages(threadId, nextPage, MESSAGES_PER_PAGE)
+      // Messages fetched DESC — reverse for display (oldest first)
+      const olderMessages = serverMessagesToUIMessages([...result.messages].reverse())
+      set({
+        messagesPage: nextPage,
+        messagesHasMore: result.hasMore,
+      })
+      return olderMessages
+    } catch (err) {
+      console.error('Failed to load older messages:', err)
+      return null
+    } finally {
+      set({ loadingOlderMessages: false })
     }
   },
 })
