@@ -1,5 +1,6 @@
 import { describe, expect, test, beforeEach, mock } from 'bun:test';
 import {
+  toWhatsAppJid,
   normalizeWhatsAppId,
   extractText,
   extractMedia,
@@ -55,6 +56,30 @@ describe('normalizeWhatsAppId', () => {
 
   test('whitespace trimmed', () => {
     expect(normalizeWhatsAppId('  1234567890@s.whatsapp.net  ')).toBe('+1234567890');
+  });
+});
+
+// ── toWhatsAppJid ──
+
+describe('toWhatsAppJid', () => {
+  test('converts phone with + prefix', () => {
+    expect(toWhatsAppJid('+1234567890')).toBe('1234567890@s.whatsapp.net');
+  });
+
+  test('converts bare digits', () => {
+    expect(toWhatsAppJid('1234567890')).toBe('1234567890@s.whatsapp.net');
+  });
+
+  test('passes through existing JID', () => {
+    expect(toWhatsAppJid('1234567890@s.whatsapp.net')).toBe('1234567890@s.whatsapp.net');
+  });
+
+  test('passes through group JID', () => {
+    expect(toWhatsAppJid('120363001234@g.us')).toBe('120363001234@g.us');
+  });
+
+  test('strips non-digit chars', () => {
+    expect(toWhatsAppJid('+1 (234) 567-890')).toBe('1234567890@s.whatsapp.net');
   });
 });
 

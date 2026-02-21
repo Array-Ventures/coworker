@@ -10,6 +10,15 @@ const SENT_MESSAGE_TTL_MS = 10 * 60_000;
 const MAX_MEDIA_SIZE = 20 * 1024 * 1024; // 20 MB
 
 /**
+ * Convert a phone number ("+1234567890", "1234567890") to a WhatsApp JID.
+ * Already-formed JIDs (containing '@') are returned as-is.
+ */
+export function toWhatsAppJid(value: string): string {
+  if (value.includes('@')) return value;
+  return value.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
+}
+
+/**
  * Normalize a WhatsApp JID or raw phone string to "+{digits}" format.
  * Group JIDs (ending in @g.us) are returned as-is.
  */

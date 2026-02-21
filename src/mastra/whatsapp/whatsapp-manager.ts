@@ -11,7 +11,9 @@ import {
   type WhatsAppConnectionStatus,
 } from './whatsapp-session';
 import { WhatsAppBridge } from './whatsapp-bridge';
+import { WhatsAppChannel } from './whatsapp-channel';
 import { normalizeWhatsAppId } from './whatsapp-utils';
+import { messageRouter } from '../messaging/router';
 import { pool } from '../db';
 
 export interface WhatsAppState {
@@ -68,6 +70,7 @@ export class WhatsAppManager {
       this.bridge.detach();
       this.bridge = null;
     }
+    messageRouter.unregister('whatsapp');
     if (this.socket) {
       closeWhatsAppSocket(this.socket);
       this.socket = null;
@@ -91,6 +94,17 @@ export class WhatsAppManager {
           this.state = { status: 'connected', qrDataUrl: null, connectedPhone: phone };
           console.log(`[whatsapp] connected as ${phone}`);
 
+          // Register with message router so `msg` CLI can send via whatsapp
+          if (this.bridge) {
+            messageRouter.register('whatsapp', new WhatsAppChannel(
+              this.bridge,
+              () => ({
+                connected: this.state.status === 'connected',
+                account: this.state.connectedPhone ?? undefined,
+              }),
+            ));
+          }
+
           // Persist enabled state
           void this.setConfig('enabled', 'true');
           void this.setConfig('auto_connect', 'true');
@@ -110,6 +124,7 @@ export class WhatsAppManager {
   async disconnect(): Promise<void> {
     this.stopped = true;
     this.clearReconnectTimer();
+    messageRouter.unregister('whatsapp');
     if (this.bridge) {
       this.bridge.detach();
       this.bridge = null;
@@ -225,6 +240,8 @@ export class WhatsAppManager {
   // ── Reconnect logic ──
 
   private handleDisconnect(update: Partial<ConnectionState>): void {
+    messageRouter.unregister('whatsapp');
+
     const statusCode = getStatusCode(
       (update.lastDisconnect as { error?: unknown } | undefined)?.error ?? update.lastDisconnect,
     );
