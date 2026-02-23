@@ -44,10 +44,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Copy the self-contained build output (includes its own node_modules)
 COPY --from=builder /app/.mastra/output ./
-
-# Copy Drizzle migrations (runMigrations() reads from ./drizzle at runtime)
-COPY drizzle ./drizzle
-
 # Create non-root user with home on persistent volume
 RUN groupadd -g 1001 nodejs && \
     useradd -u 1001 -g nodejs -d /data/home -s /bin/bash mastra
