@@ -7,8 +7,9 @@ dist
 *.db
 *.db-*
 workspaces/
-/data/
+data/
 app/out/
 .DS_Store
+.sandbox-profiles/
 src/whatsapp-auth
 .claude/
