@@ -6,7 +6,7 @@ import { isJidGroup, type WAMessage } from '@whiskeysockets/baileys';
 import type { WhatsAppSocket } from './whatsapp-session';
 import type { SendOpts } from '../messaging/router';
 import { harnessPool } from '../harness/pool';
-import { harnessStorage } from '../harness';
+import { harnessStorage, type CoworkerHarness } from '../harness';
 import { sendAndCapture, sendAndCaptureInteractive } from '../harness/utils';
 import {
   normalizeWhatsAppId,
@@ -392,7 +392,7 @@ export class WhatsAppBridge {
    * Get or create a harness instance for a given conversation key.
    * Uses a per-key lock to prevent duplicate thread creation from concurrent messages.
    */
-  private async getOrCreateHarness(key: string, title: string) {
+  private async getOrCreateHarness(key: string, title: string): Promise<CoworkerHarness> {
     const pending = this.threadLocks.get(key);
     if (pending) {
       await pending;
@@ -449,7 +449,7 @@ export class WhatsAppBridge {
           metadata: { waConversationKey: key },
         },
         perPage: 1,
-        orderBy: { field: 'updatedAt', direction: 'desc' },
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
       });
       const threads = (result as any)?.threads ?? [];
       if (threads.length > 0) {

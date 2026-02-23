@@ -57,7 +57,7 @@ describe('WhatsAppChannel', () => {
   test('send() passes through raw JID without store lookup', async () => {
     const bridge = createMockBridge();
     const store = new WhatsAppStore(makeStoreData());
-    const spy = mock(() => store.getAllowlistEntry.call(store));
+    const spy = mock(() => null);
     store.getAllowlistEntry = spy as any;
     const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
@@ -70,7 +70,7 @@ describe('WhatsAppChannel', () => {
   test('send() passes through standard JID without store lookup', async () => {
     const bridge = createMockBridge();
     const store = new WhatsAppStore(makeStoreData());
-    const spy = mock(() => store.getAllowlistEntry.call(store));
+    const spy = mock(() => null);
     store.getAllowlistEntry = spy as any;
     const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
@@ -83,7 +83,7 @@ describe('WhatsAppChannel', () => {
   test('send() passes through group JID without store lookup', async () => {
     const bridge = createMockBridge();
     const store = new WhatsAppStore(makeStoreData());
-    const spy = mock(() => store.getAllowlistEntry.call(store));
+    const spy = mock(() => null);
     store.getAllowlistEntry = spy as any;
     const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 

@@ -166,7 +166,7 @@ export default memo(function BrowserPreview() {
             className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-green-400' : 'bg-muted-dim'}`}
           />
           <span className="font-secondary text-[10px] text-muted-foreground">
-            {connected ? `Connected to ws://localhost:${useAppStore.getState().browserPreviewPort}` : 'Disconnected'}
+            {connected ? 'Connected' : 'Disconnected'}
           </span>
         </div>
         {meta && (

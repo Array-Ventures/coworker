@@ -45932,6 +45932,887 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "Y3q5q",
+      "x": 5409,
+      "y": 15460,
+      "name": "Scheduled Tasks — Mutations",
+      "width": 460,
+      "layout": "vertical",
+      "gap": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "5hnK3",
+          "name": "label1",
+          "fill": "#999999",
+          "content": "Update Action",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "4bHZ9",
+          "name": "Update Output",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Qz5mg",
+              "name": "uHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "RE7Ig",
+                  "name": "uStatusIcon",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "cMNDq",
+                  "name": "uToolIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "schedule",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "rNqBx",
+                  "name": "uToolLabel",
+                  "fill": "$--foreground",
+                  "content": "Scheduled Tasks",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "poemP",
+                  "name": "uActionPill",
+                  "fill": "$--secondary",
+                  "cornerRadius": 4,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Tmn7T",
+                      "name": "uActionText",
+                      "fill": "$--foreground",
+                      "content": "update",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VyH7p",
+                  "name": "uSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "aw9ec",
+                  "name": "uDurSep",
+                  "width": 1,
+                  "height": 12,
+                  "fill": "$--border"
+                },
+                {
+                  "type": "text",
+                  "id": "mPZ24",
+                  "name": "uDur",
+                  "fill": "$--muted-foreground",
+                  "content": "120ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "JDze5",
+                  "name": "uChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_up",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "k74N2",
+              "name": "uDivider",
+              "width": "fill_container",
+              "height": 1,
+              "fill": "$--border"
+            },
+            {
+              "type": "frame",
+              "id": "jaU2e",
+              "name": "uBody",
+              "width": "fill_container",
+              "fill": "$--background",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "p67qN",
+                  "name": "uRow1",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "iPGrc",
+                      "name": "uActionIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "edit",
+                      "iconFontFamily": "Material Symbols Rounded",
+                      "fill": "$--primary"
+                    },
+                    {
+                      "type": "text",
+                      "id": "FiEqm",
+                      "name": "uActionLabel",
+                      "fill": "$--primary",
+                      "content": "Updated",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "5cHtA",
+                      "name": "uName",
+                      "fill": "$--foreground",
+                      "content": "Heartbeat",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "2DPNF",
+                      "name": "uId",
+                      "fill": "$--muted-foreground",
+                      "content": "heartbeat",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "jL1k8",
+                      "name": "uBadgeSpacer",
+                      "width": "fill_container",
+                      "height": 1
+                    },
+                    {
+                      "type": "frame",
+                      "id": "S2rQL",
+                      "name": "uBadge",
+                      "cornerRadius": "$--radius-pill",
+                      "stroke": {
+                        "align": "inside",
+                        "thickness": 1,
+                        "fill": "$--border"
+                      },
+                      "padding": [
+                        2,
+                        8
+                      ],
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "QWO3h",
+                          "name": "uBadgeText",
+                          "fill": "$--muted-foreground",
+                          "content": "Disabled",
+                          "fontFamily": "Geist",
+                          "fontSize": 10,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "bKvMO",
+                  "name": "uCronRow",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "YJ3Og",
+                      "name": "uCronIcon",
+                      "width": 13,
+                      "height": 13,
+                      "iconFontName": "timer",
+                      "iconFontFamily": "Material Symbols Rounded",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "Lz1XK",
+                      "name": "uCronText",
+                      "fill": "$--muted-foreground",
+                      "content": "*/30 * * * *",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "nweRE",
+          "name": "label2",
+          "fill": "#999999",
+          "content": "Create Action",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "HVC8M",
+          "name": "Create Output",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "mN1Wp",
+              "name": "cHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "rpp9s",
+                  "name": "cStatusIcon",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "Rdrf4",
+                  "name": "cToolIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "schedule",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "nqLbN",
+                  "name": "cToolLabel",
+                  "fill": "$--foreground",
+                  "content": "Scheduled Tasks",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "L4WBh",
+                  "name": "cPill",
+                  "fill": "$--secondary",
+                  "cornerRadius": 4,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "Xw34x",
+                      "name": "cPillText",
+                      "fill": "$--foreground",
+                      "content": "create",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Q2Ps8",
+                  "name": "cSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "iVfUk",
+                  "name": "cDurSep",
+                  "width": 1,
+                  "height": 12,
+                  "fill": "$--border"
+                },
+                {
+                  "type": "text",
+                  "id": "xqrjb",
+                  "name": "cDur",
+                  "fill": "$--muted-foreground",
+                  "content": "89ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "fEDrR",
+                  "name": "cChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_up",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "sgRtn",
+              "name": "cDivider",
+              "width": "fill_container",
+              "height": 1,
+              "fill": "$--border"
+            },
+            {
+              "type": "frame",
+              "id": "BMRWn",
+              "name": "cBody",
+              "width": "fill_container",
+              "fill": "$--background",
+              "layout": "vertical",
+              "gap": 4,
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "LYL2Z",
+                  "name": "cRow1",
+                  "width": "fill_container",
+                  "gap": 6,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "QGc6x",
+                      "name": "cIcon",
+                      "width": 14,
+                      "height": 14,
+                      "iconFontName": "add_circle",
+                      "iconFontFamily": "Material Symbols Rounded",
+                      "fill": "$--color-success"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ZFJ5H",
+                      "name": "cLabel",
+                      "fill": "$--color-success",
+                      "content": "Created",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "text",
+                      "id": "ulmbZ",
+                      "name": "cName",
+                      "fill": "$--foreground",
+                      "content": "Daily Digest",
+                      "fontFamily": "Geist",
+                      "fontSize": 13,
+                      "fontWeight": "600"
+                    },
+                    {
+                      "type": "text",
+                      "id": "AnMfe",
+                      "name": "cId",
+                      "fill": "$--muted-foreground",
+                      "content": "daily-digest",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "3b3f5",
+                  "name": "cCronRow",
+                  "width": "fill_container",
+                  "gap": 8,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon_font",
+                      "id": "V1IRT",
+                      "name": "cCronIcon",
+                      "width": 13,
+                      "height": 13,
+                      "iconFontName": "timer",
+                      "iconFontFamily": "Material Symbols Rounded",
+                      "fill": "$--muted-foreground"
+                    },
+                    {
+                      "type": "text",
+                      "id": "5wK0O",
+                      "name": "cCronText",
+                      "fill": "$--muted-foreground",
+                      "content": "0 9 * * 1-5",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "hfvnn",
+                      "name": "cCronSep",
+                      "fill": "$--muted-dim",
+                      "content": "·",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    },
+                    {
+                      "type": "text",
+                      "id": "XVohQ",
+                      "name": "cNextRun",
+                      "fill": "$--muted-foreground",
+                      "content": "Next run: 2/24/2026, 9:00:00 AM",
+                      "fontFamily": "Geist",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "hDep5",
+          "name": "label3",
+          "fill": "#999999",
+          "content": "Delete Action",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "VYGX8",
+          "name": "Delete Output",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "cr6rA",
+              "name": "dHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "QJnQG",
+                  "name": "dStatusIcon",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "4YSen",
+                  "name": "dToolIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "schedule",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "Lilmv",
+                  "name": "dToolLabel",
+                  "fill": "$--foreground",
+                  "content": "Scheduled Tasks",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "0Ktto",
+                  "name": "dPill",
+                  "fill": "$--secondary",
+                  "cornerRadius": 4,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "QInW9",
+                      "name": "dPillText",
+                      "fill": "$--foreground",
+                      "content": "delete",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "aNRuf",
+                  "name": "dSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "qLdeP",
+                  "name": "dDurSep",
+                  "width": 1,
+                  "height": 12,
+                  "fill": "$--border"
+                },
+                {
+                  "type": "text",
+                  "id": "5U4tl",
+                  "name": "dDur",
+                  "fill": "$--muted-foreground",
+                  "content": "45ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "aG1h8",
+                  "name": "dChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_up",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "S3HKQ",
+              "name": "dDivider",
+              "width": "fill_container",
+              "height": 1,
+              "fill": "$--border"
+            },
+            {
+              "type": "frame",
+              "id": "xNtVP",
+              "name": "dBody",
+              "width": "fill_container",
+              "fill": "$--background",
+              "gap": 6,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "3qsTw",
+                  "name": "dIcon",
+                  "width": 14,
+                  "height": 14,
+                  "iconFontName": "delete",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--destructive"
+                },
+                {
+                  "type": "text",
+                  "id": "MZnkw",
+                  "name": "dLabel",
+                  "fill": "$--destructive",
+                  "content": "Deleted",
+                  "fontFamily": "Geist",
+                  "fontSize": 11,
+                  "fontWeight": "500"
+                },
+                {
+                  "type": "text",
+                  "id": "Syg9S",
+                  "name": "dName",
+                  "fill": "$--foreground",
+                  "content": "Daily Digest",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "oz95Q",
+                  "name": "dId",
+                  "fill": "$--muted-foreground",
+                  "content": "daily-digest",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "qbHMj",
+          "name": "label4",
+          "fill": "#999999",
+          "content": "Error State",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "CUS8M",
+          "name": "Error Output",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "IR3WK",
+              "name": "eHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "sizPB",
+                  "name": "eStatusIcon",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "error",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-error"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "B3Kjj",
+                  "name": "eToolIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "schedule",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "S99w7",
+                  "name": "eToolLabel",
+                  "fill": "$--foreground",
+                  "content": "Scheduled Tasks",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "aiw15",
+                  "name": "ePill",
+                  "fill": "$--secondary",
+                  "cornerRadius": 4,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "RhKu3",
+                      "name": "ePillText",
+                      "fill": "$--foreground",
+                      "content": "delete",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "wEZw5",
+                  "name": "eSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "icon_font",
+                  "id": "V6mNj",
+                  "name": "eChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_up",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "WPaid",
+              "name": "eDivider",
+              "width": "fill_container",
+              "height": 1,
+              "fill": "$--border"
+            },
+            {
+              "type": "frame",
+              "id": "m83iK",
+              "name": "eBody",
+              "width": "fill_container",
+              "fill": "$--color-error",
+              "gap": 6,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "JJqlT",
+                  "name": "eIcon",
+                  "width": 14,
+                  "height": 14,
+                  "iconFontName": "error",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-error-foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "gaoES",
+                  "name": "eText",
+                  "fill": "$--color-error-foreground",
+                  "content": "Error: Task \"daily-digest\" not found.",
+                  "fontFamily": "Geist",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {

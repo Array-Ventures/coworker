@@ -46,7 +46,7 @@ function updatePending(entry: PoolEntry, event: HarnessEvent): void {
 
 /** Buffer all events during an active run (user_message → agent_start → ... → agent_end). */
 function bufferEvent(entry: PoolEntry, event: HarnessEvent): void {
-  if (event.type === 'user_message') {
+  if ((event as any).type === 'user_message') {
     // User message starts the buffer — before agent_start
     entry.runBuffer = [event];
   } else if (event.type === 'agent_start') {

@@ -13,7 +13,6 @@ export interface BrowserPreviewSlice {
   browserPreviewConnected: boolean
   browserPreviewFrame: string | null
   browserPreviewMeta: BrowserPreviewMeta | null
-  browserPreviewPort: number
 
   toggleBrowserPreview: () => void
   setBrowserPreviewOpen: (open: boolean) => void
@@ -27,7 +26,6 @@ export const createBrowserPreviewSlice: StateCreator<AppStore, [], [], BrowserPr
   browserPreviewConnected: false,
   browserPreviewFrame: null,
   browserPreviewMeta: null,
-  browserPreviewPort: 9223,
 
   toggleBrowserPreview: () => set((s) => ({ browserPreviewOpen: !s.browserPreviewOpen })),
   setBrowserPreviewOpen: (open) => set({ browserPreviewOpen: open }),
