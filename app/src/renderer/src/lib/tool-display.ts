@@ -80,5 +80,9 @@ export function formatToolOutput(
     return null // handled by custom image render in ToolInvocation
   }
 
+  if (toolName === 'scheduled_tasks') {
+    return null // handled by custom ScheduledTasksOutput component
+  }
+
   return { type: 'pre', content: JSON.stringify(o, null, 2) }
 }

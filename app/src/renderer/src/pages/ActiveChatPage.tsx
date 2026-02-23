@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { useState, useEffect, useRef, useCallback, memo, lazy, Suspense } from 'react'
 import type { HarnessMessage, TaskItem } from '../types/harness'
 import type { ToolState, SubagentState } from '../types/harness'
 import { useAppStore } from '../stores/useAppStore'
@@ -8,6 +8,8 @@ import ChatInput from '../components/ChatInput'
 import NewChatButton from '../components/NewChatButton'
 import ThreadSwitcher from '../components/ThreadSwitcher'
 import TaskProgress from '../components/TaskProgress'
+
+const BrowserPreview = lazy(() => import('../components/BrowserPreview'))
 
 type ActiveChatPageProps = {
   messages: HarnessMessage[]
@@ -54,6 +56,8 @@ export default memo(function ActiveChatPage({
   const updateTitle = useAppStore((s) => s.updateTitle)
   const deleteThread = useAppStore((s) => s.deleteThread)
   const threadId = useAppStore((s) => s.threadId)
+  const browserPreviewOpen = useAppStore((s) => s.browserPreviewOpen)
+  const toggleBrowserPreview = useAppStore((s) => s.toggleBrowserPreview)
 
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -134,7 +138,18 @@ export default memo(function ActiveChatPage({
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <NewChatButton />
+            <button
+              onClick={toggleBrowserPreview}
+              className={`flex items-center gap-1.5 rounded-[10px] font-secondary text-[13px] font-semibold transition-colors ${
+                browserPreviewOpen
+                  ? 'bg-primary text-primary-foreground'
+                  : 'border border-primary text-primary hover:bg-primary/10'
+              }`}
+              style={{ padding: '8px 14px' }}
+            >
+              <span className="material-icon" style={{ fontSize: 16 }}>language</span>
+              Preview
+            </button>
             <button
               onClick={() => threadId && deleteThread(threadId)}
               className="flex items-center justify-center border border-border rounded-[10px] text-muted-dim hover:bg-card hover:text-foreground transition-colors"
@@ -142,87 +157,93 @@ export default memo(function ActiveChatPage({
             >
               <span className="material-icon" style={{ fontSize: 16 }}>delete</span>
             </button>
-            <button
-              className="flex items-center gap-1.5 border border-border rounded-[10px] text-muted font-secondary text-[13px] font-medium hover:bg-card hover:text-foreground"
-              style={{ padding: '8px 14px' }}
-            >
-              <span className="material-icon" style={{ fontSize: 16 }}>ios_share</span>
-              Share
-            </button>
           </div>
 
           {/* Thread switcher dropdown */}
           {showSwitcher && <ThreadSwitcher onClose={() => setShowSwitcher(false)} />}
         </div>
 
-        {/* Error bar */}
-        {error && (
-          <div className="flex items-center gap-2 px-12 py-2 bg-error-bg shrink-0">
-            <span className="material-icon text-error" style={{ fontSize: 16 }}>error</span>
-            <span className="text-error text-[13px] font-secondary flex-1">{error.message}</span>
+        {/* Content Area: chat + optional browser preview side by side */}
+        <div className="flex flex-1 min-h-0">
+          {/* Main chat content */}
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Error bar */}
+            {error && (
+              <div className="flex items-center gap-2 px-12 py-2 bg-error-bg shrink-0">
+                <span className="material-icon text-error" style={{ fontSize: 16 }}>error</span>
+                <span className="text-error text-[13px] font-secondary flex-1">{error.message}</span>
+              </div>
+            )}
+
+            {/* Messages area */}
+            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 flex flex-col gap-6 min-h-0">
+              {messages.length === 0 && !switchingThread && (
+                <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
+                  Send a message to start working with your agent.
+                </div>
+              )}
+              {switchingThread && (
+                <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
+                  Loading conversation...
+                </div>
+              )}
+              {messages.map((message, index) => (
+                <MessageBubble
+                  key={message.id}
+                  message={message}
+                  isStreaming={isLoading && index === messages.length - 1 && message.role === 'assistant'}
+                  isDark={isDark}
+                  toolStates={toolStates}
+                  subagentStates={subagentStates}
+                  onResolveToolApproval={onResolveToolApproval}
+                />
+              ))}
+
+              {/* Inline question prompt */}
+              {pendingQuestion && (
+                <QuestionPrompt
+                  question={pendingQuestion}
+                  onRespond={onRespondToQuestion}
+                />
+              )}
+
+              {/* Plan approval prompt */}
+              {pendingPlanApproval && (
+                <PlanReview
+                  plan={pendingPlanApproval}
+                  onRespond={onRespondToPlanApproval}
+                />
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Task progress (between messages and input, hidden when empty/all done) */}
+            <TaskProgress tasks={tasks} />
+
+            {/* Reply input */}
+            <div className="px-12 py-4 pb-6 shrink-0">
+              <ChatInput
+                value={input}
+                onChange={setInput}
+                onSend={onSend}
+                onStop={onStop}
+                isLoading={isLoading}
+                disabled={isLoading || switchingThread}
+                variant="reply"
+                placeholder="Reply..."
+                currentModeId={currentModeId}
+                onModeSwitch={onSwitchMode}
+              />
+            </div>
           </div>
-        )}
 
-        {/* Messages area */}
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 flex flex-col gap-6 min-h-0">
-          {messages.length === 0 && !switchingThread && (
-            <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
-              Send a message to start working with your agent.
-            </div>
+          {/* Browser Preview panel */}
+          {browserPreviewOpen && (
+            <Suspense fallback={null}>
+              <BrowserPreview />
+            </Suspense>
           )}
-          {switchingThread && (
-            <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
-              Loading conversation...
-            </div>
-          )}
-          {messages.map((message, index) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              isStreaming={isLoading && index === messages.length - 1 && message.role === 'assistant'}
-              isDark={isDark}
-              toolStates={toolStates}
-              subagentStates={subagentStates}
-              onResolveToolApproval={onResolveToolApproval}
-            />
-          ))}
-
-          {/* Inline question prompt */}
-          {pendingQuestion && (
-            <QuestionPrompt
-              question={pendingQuestion}
-              onRespond={onRespondToQuestion}
-            />
-          )}
-
-          {/* Plan approval prompt */}
-          {pendingPlanApproval && (
-            <PlanReview
-              plan={pendingPlanApproval}
-              onRespond={onRespondToPlanApproval}
-            />
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Task progress (between messages and input, hidden when empty/all done) */}
-        <TaskProgress tasks={tasks} />
-
-        {/* Reply input */}
-        <div className="px-12 py-4 pb-6 shrink-0">
-          <ChatInput
-            value={input}
-            onChange={setInput}
-            onSend={onSend}
-            onStop={onStop}
-            isLoading={isLoading}
-            disabled={isLoading || switchingThread}
-            variant="reply"
-            placeholder="Reply..."
-            currentModeId={currentModeId}
-            onModeSwitch={onSwitchMode}
-          />
         </div>
       </div>
     </PageShell>

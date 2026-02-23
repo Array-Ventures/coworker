@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ToolState } from '../types/harness'
 import { getToolDisplay, getPrimaryArgValue, getExecutionTime, formatToolOutput } from '../lib/tool-display'
 import { SearchMemoryOutput } from './SearchMemoryOutput'
+import { ScheduledTasksOutput } from './ScheduledTasksOutput'
 import { AppRenderer } from '@mcp-ui/client'
 
 const sandboxConfig = { url: new URL('./sandbox_proxy.html', window.location.href) }
@@ -249,6 +250,26 @@ export function ToolInvocation({
           onToggle={() => setExpanded(!expanded)}
         />
         {expanded && <SearchMemoryOutput output={outputObj} />}
+      </div>
+    )
+  }
+
+  // scheduled_tasks — custom render for task list/mutations
+  if (toolName === 'scheduled_tasks' && typeof result === 'string') {
+    const action = (args as Record<string, unknown>)?.action as string ?? 'list'
+    const isToolError = result.startsWith('Error:')
+    return (
+      <div className={`bg-card border ${isToolError ? 'border-error' : 'border-border'} rounded-lg mt-2 overflow-hidden`}>
+        <ToolHeader
+          toolName={toolName}
+          args={args}
+          statusIcon={isToolError ? 'error' : 'check_circle'}
+          statusIconClass={isToolError ? 'text-error' : 'text-success'}
+          duration={duration}
+          chevron={expanded ? 'up' : 'down'}
+          onToggle={() => setExpanded(!expanded)}
+        />
+        {expanded && <ScheduledTasksOutput action={action} output={result} />}
       </div>
     )
   }
