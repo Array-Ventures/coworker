@@ -5,7 +5,7 @@ DP="${DATA_PATH:-/data}"
 WS="$DP/workspace"
 
 # Ensure directories exist on the persistent volume
-mkdir -p "$WS/.agents/skills" "$WS/.bin" "$DP/config"
+mkdir -p "$WS/.agents/skills" "$WS/.bin" "$DP/config" "$DP/home" "$DP/whatsapp-auth" "$DP/gog"
 
 # Fix ownership on top-level dirs only (volume mounts start as root)
 chown mastra:nodejs "$DP" "$DP/home" "$DP/whatsapp-auth" "$DP/gog" "$DP/config" \

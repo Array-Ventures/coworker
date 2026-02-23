@@ -20,27 +20,30 @@ FROM oven/bun:1-debian
 
 WORKDIR /app
 
-# Install git, gh CLI, gog CLI, and gosu (for entrypoint user switching)
+# Install runtimes, CLIs, and tools for agent sandbox
 ARG GOG_VERSION=0.9.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git wget ca-certificates gosu && \
+      git curl ca-certificates gosu python3 python3-pip python3-venv && \
+    # Node.js 22 LTS via NodeSource
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y --no-install-recommends nodejs && \
     # gh CLI via official apt repo
     mkdir -p -m 755 /etc/apt/keyrings && \
-    wget -nv -O /tmp/gh-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg && \
-    cp /tmp/gh-keyring.gpg /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
     chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
       > /etc/apt/sources.list.d/github-cli.list && \
     apt-get update && apt-get install -y gh && \
     # gog CLI for Google Workspace
     ARCH=$(dpkg --print-architecture | sed 's/arm64/arm64/' | sed 's/amd64/amd64/') && \
-    wget -O /tmp/gog.tar.gz \
+    curl -fsSL -o /tmp/gog.tar.gz \
       "https://github.com/steipete/gogcli/releases/download/v${GOG_VERSION}/gogcli_${GOG_VERSION}_linux_${ARCH}.tar.gz" && \
     tar -xzf /tmp/gog.tar.gz -C /usr/local/bin gog && \
     chmod +x /usr/local/bin/gog && \
     # Cleanup
-    apt-get purge -y wget && apt-get autoremove -y && \
-    rm -rf /var/lib/apt/lists/* /tmp/gh-keyring.gpg /tmp/gog.tar.gz
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/* /tmp/gog.tar.gz
 
 # Copy the self-contained build output (includes its own node_modules)
 COPY --from=builder /app/.mastra/output ./
