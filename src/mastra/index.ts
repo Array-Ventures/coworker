@@ -2,6 +2,7 @@ import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } fr
 import { Mastra } from '@mastra/core/mastra';
 import { PinoLogger } from '@mastra/loggers';
 import { compress } from 'hono/compress';
+import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { coworkerAgent } from './agents/coworker/agent';
@@ -24,6 +25,7 @@ export const mastra = new Mastra({
   server: {
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
+      cors({ origin: '*' }),
       createAuthMiddleware(),
       logger(),
       timing(),
