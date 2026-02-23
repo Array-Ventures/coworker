@@ -12,6 +12,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/events', {
     method: 'GET',
     handler: async (c) => {
+      // Prevent reverse proxies (Railway, Cloudflare) from buffering the stream
+      c.header('Content-Encoding', 'Identity');
+      c.header('Cache-Control', 'no-cache');
+      c.header('X-Accel-Buffering', 'no');
       return streamSSE(c, async (stream) => {
         const unsubscribe = harnessPool.subscribe(async (threadId, event) => {
           await stream.writeSSE({
