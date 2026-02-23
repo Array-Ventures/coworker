@@ -25,7 +25,7 @@ export default memo(function SuperpowersPage() {
 
   // ── Superpowers store ──
   const superpowerStates = useAppStore((s) => s.superpowerStates)
-  const checkAllSuperpowers = useAppStore((s) => s.checkAllSuperpowers)
+  const loadSuperpowers = useAppStore((s) => s.loadSuperpowers)
   const installSuperpower = useAppStore((s) => s.installSuperpower)
   const [setupId, setSetupId] = useState<string | null>(null)
 
@@ -68,11 +68,7 @@ export default memo(function SuperpowersPage() {
   // ── Load on mount ──
   useSliceData(loadInstalledSkills)
   useSliceData(loadMcpServers)
-
-  // ── Check superpowers status on mount ──
-  useEffect(() => {
-    checkAllSuperpowers()
-  }, [checkAllSuperpowers])
+  useSliceData(loadSuperpowers)
 
   // ── Load skills browse ──
   useEffect(() => {
@@ -336,7 +332,7 @@ export default memo(function SuperpowersPage() {
             ) : (
               <div className="grid grid-cols-2 gap-3">
                 {browseSkills.map((skill) => {
-                  const installed = installedSkills[skill.id]
+                  const installed = installedSkills[skill.name]
                   const installedSource = installed?.skillsShSource
                     ? `${installed.skillsShSource.owner}/${installed.skillsShSource.repo}`
                     : null

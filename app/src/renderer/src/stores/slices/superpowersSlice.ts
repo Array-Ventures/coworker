@@ -4,13 +4,14 @@ import { SUPERPOWERS, type SuperpowerDef, type SuperpowerState } from '../../dat
 import {
   checkSuperpowerRuntime,
   installSuperpowerRuntime,
-  updateAgentConfig,
 } from '../../mastra-client'
 
 export interface SuperpowersSlice {
   superpowerStates: Record<string, SuperpowerState>
+  superpowersLoaded: boolean
   superpowerInstalling: string | null
 
+  loadSuperpowers: () => Promise<void>
   checkSuperpowerStatus: (id: string) => Promise<void>
   checkAllSuperpowers: () => Promise<void>
   installSuperpower: (id: string, envOverrides?: Record<string, string>) => Promise<boolean>
@@ -42,9 +43,37 @@ function isFullyInstalled(state: SuperpowerState): boolean {
   return all.length > 0 && all.every(Boolean)
 }
 
+// Module-scoped dedup promise
+let _loadSuperpowers: Promise<void> | null = null
+
 export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersSlice> = (set, get) => ({
   superpowerStates: Object.fromEntries(SUPERPOWERS.map((d) => [d.id, emptyState(d)])),
+  superpowersLoaded: false,
   superpowerInstalling: null,
+
+  loadSuperpowers: async () => {
+    const fetcher = async () => {
+      // Ensure dependent data is loaded before checking status
+      await Promise.all([
+        get().loadInstalledSkills(),
+        get().loadBrain(),
+        get().loadMcpServers(),
+      ])
+      await get().checkAllSuperpowers()
+    }
+
+    // SWR: if loaded, revalidate in background
+    if (get().superpowersLoaded) { fetcher().catch(() => {}); return }
+
+    // In-flight dedup
+    if (!_loadSuperpowers) {
+      _loadSuperpowers = fetcher()
+        .then(() => set({ superpowersLoaded: true }))
+        .catch(() => set({ superpowersLoaded: true }))
+        .finally(() => { _loadSuperpowers = null })
+    }
+    return _loadSuperpowers
+  },
 
   checkSuperpowerStatus: async (id) => {
     const def = SUPERPOWERS.find((d) => d.id === id)
@@ -117,6 +146,11 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
       }))
     }
 
+    const cleanup = () => {
+      patch({ installing: false, installStep: null })
+      set({ superpowerInstalling: null })
+    }
+
     patch({ installing: true, error: null, installStep: null })
     set({ superpowerInstalling: id })
 
@@ -124,7 +158,6 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
       // 1. Install skills
       for (const skill of def.components.skills ?? []) {
         patch({ installStep: `Installing ${skill.name} skill...` })
-        const [owner, repo] = skill.source.split('/')
         const installed = get().installedSkills[skill.name]
         if (!installed) {
           const ok = await get().installSkill({
@@ -134,8 +167,8 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
             topSource: skill.source,
           })
           if (!ok) {
-            patch({ error: `Failed to install skill: ${skill.name}`, installing: false, installStep: null })
-            set({ superpowerInstalling: null })
+            patch({ error: `Failed to install skill: ${skill.name}` })
+            cleanup()
             return false
           }
         }
@@ -144,13 +177,12 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
       // 2. Install runtimes
       for (const rt of def.components.runtimes ?? []) {
         patch({ installStep: `Installing ${rt.label}...` })
-        // Check first
         const check = await checkSuperpowerRuntime(rt.check).catch(() => ({ ok: false }))
         if (!check.ok) {
           const res = await installSuperpowerRuntime(rt.install)
           if (!res.ok) {
-            patch({ error: `Runtime install failed: ${res.error || res.output}`, installing: false, installStep: null })
-            set({ superpowerInstalling: null })
+            patch({ error: `Runtime install failed: ${res.error || res.output}` })
+            cleanup()
             return false
           }
         }
@@ -167,8 +199,7 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
             newEnv[key] = envOverrides?.[key] ?? envDef.value
           }
         }
-        await updateAgentConfig({ sandboxEnv: newEnv })
-        await get().loadAgentConfig()
+        await get().updateSandboxEnv(newEnv)
       }
 
       // 4. Add MCP servers
@@ -184,12 +215,11 @@ export const createSuperpowersSlice: StateCreator<AppStore, [], [], SuperpowersS
       patch({ installStep: 'Verifying...' })
       await get().checkSuperpowerStatus(id)
 
-      patch({ installing: false, installStep: null })
-      set({ superpowerInstalling: null })
+      cleanup()
       return true
     } catch (err: any) {
-      patch({ error: err.message, installing: false, installStep: null })
-      set({ superpowerInstalling: null })
+      patch({ error: err.message })
+      cleanup()
       return false
     }
   },

@@ -72,6 +72,7 @@ export const createSkillsSlice: StateCreator<AppStore, [], [], SkillsSlice> = (s
       const [owner, repo] = skill.topSource.split('/')
       const res = await installSkillSh(owner, repo, skill.id)
       if (res.success) {
+        set({ skillsLoaded: false })
         await get().loadInstalledSkills()
         return true
       }
@@ -89,7 +90,8 @@ export const createSkillsSlice: StateCreator<AppStore, [], [], SkillsSlice> = (s
       const res = await removeSkillSh(skill.id)
       if (res.success) {
         const { [skill.id]: _, ...rest } = get().installedSkills
-        set({ installedSkills: rest })
+        set({ installedSkills: rest, skillsLoaded: false })
+        await get().loadInstalledSkills()
         return true
       }
       return false

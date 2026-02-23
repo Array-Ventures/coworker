@@ -168,7 +168,7 @@ export const harnessRoutes = [
     handler: async (c) => {
       const { title, channel } = await c.req.json();
       const { threadId, entry } = await harnessPool.createThread(title, channel);
-      return c.json({ id: threadId });
+      return c.json({ threadId });
     },
   }),
 
