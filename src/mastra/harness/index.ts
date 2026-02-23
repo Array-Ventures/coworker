@@ -1,7 +1,7 @@
 import { Harness } from '@mastra/core/harness';
 import { createWorkspaceTools } from '@mastra/core/workspace';
 import { coworkerAgent } from '../agents/coworker/agent';
-import { DEFAULT_MODEL } from '../config/agent-config';
+import { AGENT_ID, DEFAULT_MODEL } from '../config/agent-config';
 import { getDynamicWorkspace } from '../agents/coworker/workspace';
 import { subagents } from '../agents/subagents';
 import { resolveModel } from '../agents/coworker/model';
@@ -11,8 +11,6 @@ import { getDynamicMemory } from './memory';
 import { getMcpToolsets } from '../mcp';
 import { viewImageTool } from './tools/view-image';
 import { storage } from '../db';
-
-const AGENT_ID = process.env.AGENT_ID || 'coworker';
 
 /** Concrete harness type used across the app (parameterized with our stateSchema) */
 export type CoworkerHarness = Harness<typeof stateSchema>;

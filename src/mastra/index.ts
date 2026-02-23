@@ -23,7 +23,6 @@ export const mastra = new Mastra({
   agents: { coworkerAgent },
   mcpServers: { coworkerMcpServer },
   server: {
-    host: process.env.MASTRA_HOST || undefined,
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
       createAuthMiddleware(),

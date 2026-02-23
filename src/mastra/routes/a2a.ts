@@ -1,6 +1,5 @@
 import { registerApiRoute } from '@mastra/core/server';
-
-const AGENT_ID = process.env.AGENT_ID || 'coworker';
+import { AGENT_ID } from '../config/agent-config';
 
 export const a2aRoutes = [
   registerApiRoute('/a2a-info', {

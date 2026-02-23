@@ -1,12 +1,10 @@
 import { Agent } from "@mastra/core/agent";
-import { agentConfig } from "../../config/agent-config";
+import { AGENT_ID, agentConfig } from "../../config/agent-config";
 import { noOpSemanticRecall } from "../../processors/no-op-semantic-recall";
 import { searchMemoryTool } from "../../tools/search-memory";
 import { getDynamicWorkspace } from "./workspace";
 import { getInstructions } from "./instructions";
 import { getModel } from "./model";
-
-const AGENT_ID = process.env.AGENT_ID || "coworker";
 
 export const coworkerAgent = new Agent({
   id: AGENT_ID,
