@@ -1,5 +1,4 @@
 import { registerApiRoute } from '@mastra/core/server';
-import { streamSSE } from 'hono/streaming';
 import { harnessPool } from '../harness/pool';
 
 /** Helper: get threadId from query or body, return 400 if missing */
@@ -12,35 +11,52 @@ export const harnessRoutes = [
   registerApiRoute('/harness/events', {
     method: 'GET',
     handler: async (c) => {
-      // Prevent reverse proxies (Railway, Cloudflare) from buffering the stream
-      c.header('Content-Encoding', 'Identity');
-      c.header('Cache-Control', 'no-cache');
-      c.header('X-Accel-Buffering', 'no');
-      return streamSSE(c, async (stream) => {
-        const unsubscribe = harnessPool.subscribe(async (threadId, event) => {
-          await stream.writeSSE({
-            event: event.type,
-            data: JSON.stringify({ ...event, threadId }),
+      // Manual ReadableStream instead of Hono's streamSSE — streamSSE sets
+      // Transfer-Encoding: chunked as a response header which Railway's proxy rejects (502).
+      // Pattern matches Mastra's own SSE handler (deployer/handlers/client.ts).
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+          const send = (event: string, data: string) => {
+            controller.enqueue(encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+          };
+
+          // Send initial event immediately (critical for proxy compatibility)
+          send('connected', '');
+
+          const unsubscribe = harnessPool.subscribe(async (threadId, event) => {
+            try {
+              send(event.type, JSON.stringify({ ...event, threadId }));
+            } catch {
+              // Stream closed
+            }
           });
-        });
 
-        // Heartbeat every 15s to keep connection alive
-        const heartbeat = setInterval(async () => {
-          try {
-            await stream.writeSSE({ event: 'heartbeat', data: '' });
-          } catch {
+          // Heartbeat every 15s to keep connection alive
+          const heartbeat = setInterval(() => {
+            try {
+              send('heartbeat', '');
+            } catch {
+              clearInterval(heartbeat);
+            }
+          }, 15_000);
+
+          // Cleanup on disconnect
+          c.req.raw.signal.addEventListener('abort', () => {
             clearInterval(heartbeat);
-          }
-        }, 15_000);
+            unsubscribe();
+            controller.close();
+          });
+        },
+      });
 
-        // Cleanup on disconnect
-        stream.onAbort(() => {
-          clearInterval(heartbeat);
-          unsubscribe();
-        });
-
-        // Keep stream open
-        await new Promise(() => {});
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        },
       });
     },
   }),
