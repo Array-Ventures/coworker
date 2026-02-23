@@ -1,14 +1,19 @@
-import type { Harness, HarnessEvent, HarnessStateSchema } from '@mastra/core/harness';
+import type { HarnessEvent } from '@mastra/core/harness';
+import { harnessPool } from './pool';
 
 /**
- * Send a message via harness and capture the assistant's reply text.
- * Works because sendMessage() awaits the full stream, and subscribe()
- * fires synchronously during processing — by the time sendMessage()
- * resolves, message_end has already fired.
+ * Send a message via the pool and capture the assistant's reply text.
+ * Uses pool.sendAsync() which emits user_message event before calling
+ * harness.sendMessage(). The subscribe fires synchronously during
+ * processing — by the time sendAsync() resolves, message_end has
+ * already fired.
  */
-export async function sendAndCapture<T extends HarnessStateSchema>(harness: Harness<T>, content: string): Promise<string> {
+export async function sendAndCapture(threadId: string, content: string): Promise<string> {
+  const entry = harnessPool.get(threadId);
+  if (!entry) throw new Error(`No pool entry for ${threadId}`);
+
   const textParts: string[] = [];
-  const unsub = harness.subscribe((event: HarnessEvent) => {
+  const unsub = entry.harness.subscribe((event: HarnessEvent) => {
     if (event.type === 'message_end') {
       for (const part of event.message.content) {
         if (part.type === 'text') textParts.push(part.text);
@@ -16,7 +21,7 @@ export async function sendAndCapture<T extends HarnessStateSchema>(harness: Harn
     }
   });
   try {
-    await harness.sendMessage({ content });
+    await harnessPool.sendAsync(threadId, content);
     return textParts.join('\n').trim();
   } finally {
     unsub();
@@ -39,13 +44,16 @@ export type InteractionHandlers = {
  * - tool_approval_required → auto-approved (yolo semantics)
  * - plan_approval_required → forwarded to onPlanApproval handler, or auto-approved
  */
-export async function sendAndCaptureInteractive<T extends HarnessStateSchema>(
-  harness: Harness<T>,
+export async function sendAndCaptureInteractive(
+  threadId: string,
   content: string,
   handlers: InteractionHandlers,
 ): Promise<string> {
+  const entry = harnessPool.get(threadId);
+  if (!entry) throw new Error(`No pool entry for ${threadId}`);
+
   const textParts: string[] = [];
-  const unsub = harness.subscribe((event: HarnessEvent) => {
+  const unsub = entry.harness.subscribe((event: HarnessEvent) => {
     if (event.type === 'message_end') {
       for (const part of event.message.content) {
         if (part.type === 'text') textParts.push(part.text);
@@ -54,24 +62,24 @@ export async function sendAndCaptureInteractive<T extends HarnessStateSchema>(
     // ask_user → forward to handler
     if (event.type === 'ask_question' && handlers.onQuestion) {
       handlers.onQuestion({ questionId: event.questionId, question: event.question, options: event.options })
-        .then(answer => harness.respondToQuestion({ questionId: event.questionId, answer }))
+        .then(answer => entry.harness.respondToQuestion({ questionId: event.questionId, answer }))
         .catch(() => {}); // timeout — agent will be aborted by outer timeout
     }
     // tool_approval → auto-approve (yolo semantics)
     if (event.type === 'tool_approval_required') {
-      harness.respondToToolApproval({ decision: 'approve' });
+      entry.harness.respondToToolApproval({ decision: 'approve' });
     }
     // plan_approval → forward to handler or auto-approve
     if (event.type === 'plan_approval_required' && handlers.onPlanApproval) {
       handlers.onPlanApproval({ planId: event.planId, title: event.title, plan: event.plan })
-        .then(response => harness.respondToPlanApproval({ planId: event.planId, response }))
-        .catch(() => harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } }));
+        .then(response => entry.harness.respondToPlanApproval({ planId: event.planId, response }))
+        .catch(() => entry.harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } }));
     } else if (event.type === 'plan_approval_required') {
-      harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
+      entry.harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
     }
   });
   try {
-    await harness.sendMessage({ content });
+    await harnessPool.sendAsync(threadId, content);
     return textParts.join('\n').trim();
   } finally {
     unsub();

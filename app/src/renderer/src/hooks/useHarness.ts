@@ -134,7 +134,7 @@ export function useHarness() {
   // SSE Event Handlers — events now include threadId
   // ---------------------------------------------------------------------------
 
-  const handleEvent = useCallback((event: HarnessEvent & { threadId?: string }) => {
+  const handleEvent = useCallback((event: HarnessEvent & { threadId?: string }, isReplay = false) => {
     const s = stateRef.current
     const eventThreadId = event.threadId
     const isCurrentThread = !eventThreadId || eventThreadId === s.currentThreadId
@@ -187,8 +187,9 @@ export function useHarness() {
         patch({
           status: 'streaming',
           error: null,
-          toolStates: new Map(),
-          subagentStates: new Map(),
+          // During replay, preserve existing tool/subagent states — clearing them would
+          // drop state that was already reconstructed from earlier buffer events
+          ...(isReplay ? {} : { toolStates: new Map(), subagentStates: new Map() }),
         })
         break
 
@@ -206,6 +207,25 @@ export function useHarness() {
       case 'error':
         patch({ error: event.error })
         break
+
+      // --- User Message (synthetic event from pool.send) ---
+      case 'user_message': {
+        // Dedup: don't add if we already have this message (optimistic add from sendMessage)
+        const content = (event as any).content as string
+        const alreadyHas = s.messages.some(m =>
+          m.role === 'user' && m.content.some(c => c.type === 'text' && c.text === content)
+        )
+        if (!alreadyHas) {
+          const userMsg: HarnessMessage = {
+            id: `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            role: 'user',
+            content: [{ type: 'text', text: content }],
+            createdAt: new Date((event as any).createdAt),
+          }
+          patch({ messages: [...s.messages, userMsg] })
+        }
+        break
+      }
 
       // --- Messages ---
       case 'message_start':
@@ -463,6 +483,61 @@ export function useHarness() {
   }, [patch])
 
   // ---------------------------------------------------------------------------
+  // SSE Reconnect Recovery
+  // ---------------------------------------------------------------------------
+
+  /** Re-sync current thread state after SSE reconnect */
+  const resyncCurrentThread = useCallback(async () => {
+    const threadId = stateRef.current.currentThreadId
+    if (!threadId) return
+
+    try {
+      const status = await harnessGet<{
+        running: boolean;
+        pending: {
+          question: { questionId: string; question: string; options?: { label: string; description?: string }[] } | null;
+          toolApproval: { toolCallId: string; toolName: string; args: unknown } | null;
+          planApproval: { planId: string; title: string; plan: string } | null;
+        };
+        runBuffer: (HarnessEvent & { threadId?: string })[];
+      }>('status', { threadId })
+
+      if (status.running) {
+        // Run still active — replay buffer to catch up on missed events
+        patch({ toolStates: new Map(), subagentStates: new Map() })
+        for (const event of status.runBuffer) {
+          handleEvent({ ...event, threadId }, true)
+        }
+        patch({
+          status: 'streaming',
+          pendingQuestion: status.pending.question ?? null,
+          pendingToolApproval: status.pending.toolApproval ?? null,
+          pendingPlanApproval: status.pending.planApproval ?? null,
+        })
+      } else if (stateRef.current.status === 'streaming') {
+        // Was streaming before disconnect, now idle — run completed during disconnect
+        const data = await harnessGet<{ messages: HarnessMessage[] }>('thread/messages', { threadId })
+        patch({
+          messages: data.messages || [],
+          status: 'idle',
+          currentStreamingMessage: null,
+          toolStates: new Map(),
+          subagentStates: new Map(),
+          pendingQuestion: null,
+          pendingToolApproval: null,
+          pendingPlanApproval: null,
+        })
+      }
+    } catch {
+      // Status endpoint unavailable — best effort
+    }
+  }, [patch, handleEvent])
+
+  // Ref to avoid circular dependency between connect and resyncCurrentThread
+  const resyncRef = useRef(resyncCurrentThread)
+  resyncRef.current = resyncCurrentThread
+
+  // ---------------------------------------------------------------------------
   // SSE Connection
   // ---------------------------------------------------------------------------
 
@@ -479,7 +554,12 @@ export function useHarness() {
 
       async onopen(response) {
         if (response.ok && response.headers.get('content-type')?.includes(EventStreamContentType)) {
+          const wasDisconnected = !stateRef.current.connected
           patch({ connected: true, error: null })
+          // On reconnect, re-sync current thread to recover any missed events
+          if (wasDisconnected && stateRef.current.currentThreadId) {
+            resyncRef.current()
+          }
           return
         }
         throw new Error(`SSE open failed: ${response.status} ${response.statusText}`)
@@ -680,7 +760,7 @@ export function useHarness() {
           if (event.type === 'message_end' && 'message' in event && historyMessageIds.has((event as { message: { id: string } }).message.id)) {
             continue
           }
-          handleEvent({ ...event, threadId })
+          handleEvent({ ...event, threadId }, true)
         }
       }
     } catch {

@@ -167,7 +167,7 @@ export default memo(function MessageBubble({
           toolCallId: tc.id,
           toolName: tc.name,
           args: tc.args,
-          status: result ? (result.isError ? 'error' as const : 'completed' as const) : 'running' as const,
+          status: result ? (result.isError ? 'error' as const : 'completed' as const) : (isStreaming ? 'running' as const : 'error' as const),
           result: result?.result,
           isError: result?.isError,
         } as ToolState

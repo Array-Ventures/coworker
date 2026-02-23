@@ -567,8 +567,8 @@ export class WhatsAppBridge {
       const poolThreadId = this.threadMap.get(threadKey);
 
       const replyText = observeOnly
-        ? await sendAndCapture(harness, content)
-        : await sendAndCaptureInteractive(harness, content, {
+        ? await sendAndCapture(poolThreadId!, content)
+        : await sendAndCaptureInteractive(poolThreadId!, content, {
             onQuestion: async ({ question, options }) => {
               let msg = question;
               if (options?.length) {

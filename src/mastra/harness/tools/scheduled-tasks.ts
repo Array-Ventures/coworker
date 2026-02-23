@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import { createTool } from '@mastra/core/tools'
 import { Cron } from 'croner'
-import { taskManager } from '../../scheduled-tasks'
+
+// Dynamic import to break circular dependency:
+// scheduled-tasks → workflows/scheduled-task → harness/pool → harness/index → this file → scheduled-tasks
+const getTaskManager = () => import('../../scheduled-tasks').then(m => m.taskManager);
 
 export const scheduledTasksTool = createTool({
   id: 'scheduled_tasks',
@@ -16,6 +19,7 @@ export const scheduledTasksTool = createTool({
     enabled: z.boolean().optional().describe('Enable or disable the task (for update)'),
   }),
   execute: async ({ action, id, name, cron, prompt, enabled }) => {
+    const taskManager = await getTaskManager();
     switch (action) {
       case 'list': {
         const tasks = await taskManager.list()

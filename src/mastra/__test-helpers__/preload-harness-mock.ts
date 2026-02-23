@@ -25,8 +25,11 @@ mock.module('../harness/pool', () => ({
   harnessPool: mockHarnessPool,
 }));
 
-// Mock harness/utils — sendAndCapture reimplemented to avoid @mastra/core/harness import
-const mockSendAndCapture = async (harness: { subscribe: Function; sendMessage: Function }, msgContent: string) => {
+// Mock harness/utils — sendAndCapture reimplemented with threadId-based signature
+const mockSendAndCapture = async (threadId: string, msgContent: string) => {
+  const entry = mockHarnessPool.get(threadId);
+  if (!entry) throw new Error(`No mock pool entry for ${threadId}`);
+  const harness = entry.harness;
   const textParts: string[] = [];
   const unsub = harness.subscribe((event: Record<string, unknown>) => {
     if (event.type === 'message_end') {
@@ -47,7 +50,7 @@ const mockSendAndCapture = async (harness: { subscribe: Function; sendMessage: F
 mock.module('../harness/utils', () => ({
   sendAndCapture: mockSendAndCapture,
   // Interactive version: same as sendAndCapture in tests (handlers are not exercised here)
-  sendAndCaptureInteractive: async (harness: { subscribe: Function; sendMessage: Function }, msgContent: string, _handlers: unknown) => {
-    return mockSendAndCapture(harness, msgContent);
+  sendAndCaptureInteractive: async (threadId: string, msgContent: string, _handlers: unknown) => {
+    return mockSendAndCapture(threadId, msgContent);
   },
 }));

@@ -54,7 +54,7 @@ export const SUPERPOWERS: SuperpowerDef[] = [
       skills: [{ source: 'vercel-labs/agent-browser', name: 'agent-browser' }],
       runtimes: [{
         label: 'agent-browser CLI + Chromium',
-        install: 'npm install -g agent-browser && agent-browser install --with-deps',
+        install: 'npm install --save agent-browser && ln -sf $PWD/node_modules/.bin/agent-browser $HOME/.bin/agent-browser && agent-browser install --with-deps',
         check: 'agent-browser --version',
       }],
       envVars: {

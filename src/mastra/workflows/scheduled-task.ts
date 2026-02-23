@@ -9,7 +9,7 @@ const executeStep = createStep({
   outputSchema: z.object({ result: z.string() }),
   execute: async ({ inputData }) => {
     // Create a thread and harness via the pool
-    const { entry } = await harnessPool.createThread(
+    const { threadId, entry } = await harnessPool.createThread(
       `[Scheduled] ${inputData.taskName}`,
       'scheduled',
     );
@@ -18,7 +18,7 @@ const executeStep = createStep({
     // No timeout — pool sweeper handles lifecycle.
     // ask_user questions reach the UI via multiplexed SSE.
     try {
-      const result = await sendAndCapture(entry.harness, inputData.prompt);
+      const result = await sendAndCapture(threadId, inputData.prompt);
       return { result };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

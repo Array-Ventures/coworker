@@ -47,10 +47,8 @@ export const harnessRoutes = [
     handler: async (c) => {
       const { threadId, content, images } = await c.req.json();
       if (!threadId) return c.json({ error: 'threadId required' }, 400);
-      const { harness } = await harnessPool.getOrCreate(threadId);
-      harness.sendMessage({ content, images }).catch((err) => {
-        console.error('[harness] sendMessage error:', err);
-      });
+      await harnessPool.getOrCreate(threadId);
+      harnessPool.send(threadId, content, images);
       return c.json({ ok: true });
     },
   }),

@@ -44,10 +44,15 @@ function updatePending(entry: PoolEntry, event: HarnessEvent): void {
   }
 }
 
-/** Buffer all events during an active run (agent_start → agent_end). */
+/** Buffer all events during an active run (user_message → agent_start → ... → agent_end). */
 function bufferEvent(entry: PoolEntry, event: HarnessEvent): void {
-  if (event.type === 'agent_start') {
-    entry.runBuffer = [event]; // New run — reset buffer
+  if (event.type === 'user_message') {
+    // User message starts the buffer — before agent_start
+    entry.runBuffer = [event];
+  } else if (event.type === 'agent_start') {
+    // If buffer already has user_message, append; otherwise start fresh
+    if (entry.runBuffer.length === 0) entry.runBuffer = [event];
+    else entry.runBuffer.push(event);
   } else if (entry.runBuffer.length > 0) {
     entry.runBuffer.push(event);
     if (event.type === 'agent_end') {
@@ -114,6 +119,38 @@ class HarnessPool {
   touch(threadId: string): void {
     const entry = this.pool.get(threadId);
     if (entry) entry.lastActivityAt = Date.now();
+  }
+
+  /** Send a message — emits user_message event, then delegates to harness (fire-and-forget) */
+  send(threadId: string, content: string, images?: { data: string; mimeType: string }[]): void {
+    const entry = this.pool.get(threadId);
+    if (!entry) return;
+    entry.lastActivityAt = Date.now();
+
+    const userEvent = { type: 'user_message', content, createdAt: new Date().toISOString() } as any;
+    bufferEvent(entry, userEvent);
+    for (const listener of this.listeners) {
+      listener(threadId, userEvent);
+    }
+
+    entry.harness.sendMessage({ content, images }).catch((err) => {
+      console.error('[harness] sendMessage error:', err);
+    });
+  }
+
+  /** Send a message and await completion — used by sendAndCapture utils */
+  async sendAsync(threadId: string, content: string, images?: { data: string; mimeType: string }[]): Promise<void> {
+    const entry = this.pool.get(threadId);
+    if (!entry) throw new Error(`No pool entry for ${threadId}`);
+    entry.lastActivityAt = Date.now();
+
+    const userEvent = { type: 'user_message', content, createdAt: new Date().toISOString() } as any;
+    bufferEvent(entry, userEvent);
+    for (const listener of this.listeners) {
+      listener(threadId, userEvent);
+    }
+
+    await entry.harness.sendMessage({ content, images });
   }
 
   /** Subscribe to events from ALL harnesses */

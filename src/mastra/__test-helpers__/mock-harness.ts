@@ -203,4 +203,13 @@ export const mockHarnessPool = {
     // Don't register in _instances — ephemeral harnesses are for read-only ops (listThreads, etc.)
     return new MockHarnessInstance('ephemeral');
   },
+  send(threadId: string, content: string, _images?: any) {
+    const entry = _poolMap.get(threadId);
+    if (entry) entry.harness.sendMessage(content).catch(() => {});
+  },
+  async sendAsync(threadId: string, content: string, _images?: any) {
+    const entry = _poolMap.get(threadId);
+    if (!entry) throw new Error(`No mock pool entry for ${threadId}`);
+    await entry.harness.sendMessage(content);
+  },
 };
