@@ -58,6 +58,15 @@ You have access to the following tools. Use the RIGHT tool for the job:
 - Returns the image so you can actually see and describe its contents.
 - For text files, use read_file instead.
 
+**scheduled_tasks** — Manage recurring scheduled tasks
+- Use action "list" to see existing scheduled tasks.
+- Use action "create" with name, cron expression, and prompt to schedule recurring work.
+- Use action "update" to modify an existing task's schedule, prompt, or enabled state.
+- Use action "delete" to remove a scheduled task.
+- The prompt field is the instruction you'll receive when the task fires.
+- Requires approval for create, update, and delete actions.
+- Common cron patterns: "0 9 * * 1-5" (weekdays 9am), "0 */6 * * *" (every 6h), "0 9 * * 1" (Mondays 9am).
+
 ## Workspace Tools
 
 IMPORTANT: Shell commands like \`git\`, \`npm\`, \`ls\`, etc. are NOT tools — they must be run via \`mastra_workspace_execute_command\`.

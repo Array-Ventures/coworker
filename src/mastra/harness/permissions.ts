@@ -30,6 +30,10 @@ export const TOOL_CATEGORIES: Partial<Record<ToolCategory, { label: string; desc
     label: 'MCP',
     description: 'External MCP server tools',
   },
+  schedule: {
+    label: 'Schedule',
+    description: 'Create and manage recurring scheduled tasks',
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -58,6 +62,9 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
 
   // Workspace sandbox — execute
   mastra_workspace_execute_command: 'execute',
+
+  // Scheduled tasks — schedule
+  scheduled_tasks: 'schedule',
 };
 
 // Tools that never need approval regardless of policy
@@ -90,6 +97,7 @@ export const DEFAULT_POLICIES: Partial<Record<ToolCategory, PermissionPolicy>> =
   edit: 'ask',
   execute: 'ask',
   mcp: 'ask',
+  schedule: 'ask',
 };
 
 /** YOLO-mode policies — everything auto-allowed. */
@@ -98,6 +106,7 @@ export const YOLO_POLICIES: Partial<Record<ToolCategory, PermissionPolicy>> = {
   edit: 'allow',
   execute: 'allow',
   mcp: 'allow',
+  schedule: 'allow',
 };
 
 export function createDefaultRules(): PermissionRules {

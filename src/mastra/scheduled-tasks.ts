@@ -231,3 +231,6 @@ This is your time. You can:
     }
   }
 }
+
+/** Singleton instance — imported by the scheduled_tasks tool and routes. */
+export const taskManager = new ScheduledTaskManager();

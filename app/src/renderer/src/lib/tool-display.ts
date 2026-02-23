@@ -22,6 +22,7 @@ const WORKSPACE_TOOLS: Record<string, ToolMeta> = {
   view_app: { displayName: 'View App', icon: 'web', primaryArg: 'name' },
   searchMemory: { displayName: 'Search Memory', icon: 'neurology', primaryArg: 'query' },
   view_image: { displayName: 'View Image', icon: 'image', primaryArg: 'path' },
+  scheduled_tasks: { displayName: 'Scheduled Tasks', icon: 'schedule', primaryArg: 'action' },
 }
 
 export function getToolDisplay(toolName: string): ToolMeta {

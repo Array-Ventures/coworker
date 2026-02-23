@@ -10,6 +10,7 @@ import { getToolCategory } from './permissions';
 import { getDynamicMemory } from './memory';
 import { getMcpToolsets } from '../mcp';
 import { viewImageTool } from './tools/view-image';
+import { scheduledTasksTool } from './tools/scheduled-tasks';
 import { storage } from '../db';
 
 /** Concrete harness type used across the app (parameterized with our stateSchema) */
@@ -36,7 +37,7 @@ export const sharedConfig = {
   tools: async ({ requestContext }: { requestContext: any }) => {
     const mcpTools = await getMcpToolsets();
     const wsTools = createWorkspaceTools(getDynamicWorkspace({ requestContext }));
-    return { ...mcpTools, ...wsTools, view_image: viewImageTool };
+    return { ...mcpTools, ...wsTools, view_image: viewImageTool, scheduled_tasks: scheduledTasksTool };
   },
   subagents,
   resolveModel,

@@ -60,6 +60,9 @@ export function getDynamicWorkspace({ requestContext }: { requestContext: Reques
         PATH: `${WORKSPACE_PATH}/.bin:${process.env.PATH}`,
         HOME: WORKSPACE_PATH,
         PORT: process.env.PORT || '4111',
+        ...(process.env.PLAYWRIGHT_BROWSERS_PATH && {
+          PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH,
+        }),
         ...userEnv,
       },
       isolation: detection.available ? detection.backend : "none",

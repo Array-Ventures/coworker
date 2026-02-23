@@ -11,6 +11,7 @@ import { mcpRoutes } from './mcp';
 import { messagingRoutes } from './messaging';
 import { skillsRoutes } from './skills';
 import { a2aRoutes } from './a2a';
+import { superpowersRoutes } from './superpowers';
 
 export function createRoutes(deps: {
   taskManager: ScheduledTaskManager;
@@ -28,5 +29,6 @@ export function createRoutes(deps: {
     ...messagingRoutes(deps.whatsAppManager),
     ...skillsRoutes,
     ...a2aRoutes,
+    ...superpowersRoutes,
   ];
 }

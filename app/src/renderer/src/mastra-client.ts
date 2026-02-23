@@ -628,6 +628,26 @@ export async function removeWhatsAppGroup(groupJid: string): Promise<void> {
   })
 }
 
+// ── Superpowers (runtime check/install) ──
+
+export async function checkSuperpowerRuntime(check: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/superpowers/check-runtime`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ check }),
+  })
+  return res.json()
+}
+
+export async function installSuperpowerRuntime(install: string): Promise<{ ok: boolean; output?: string; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/superpowers/install-runtime`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ install }),
+  })
+  return res.json()
+}
+
 // ── MCP Servers ──
 
 export interface McpServerConfig {

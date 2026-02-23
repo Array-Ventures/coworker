@@ -8,15 +8,13 @@ import { coworkerAgent } from './agents/coworker/agent';
 import { coworkerMemory, INITIAL_WORKING_MEMORY } from './memory';
 import { storage } from './db';
 import { seedBuiltinSkills } from './config/seed-skills';
-import { ScheduledTaskManager } from './scheduled-tasks';
+import { taskManager } from './scheduled-tasks';
 import { agentConfig } from './config/agent-config';
 import { WhatsAppManager } from './whatsapp/whatsapp-manager';
 import { coworkerMcpServer } from './mcp/server';
 import { harnessPool } from './harness/pool';
 import { createAuthMiddleware } from './middleware/auth';
 import { createRoutes } from './routes';
-
-const taskManager = new ScheduledTaskManager();
 const whatsAppManager = new WhatsAppManager();
 
 export const mastra = new Mastra({
