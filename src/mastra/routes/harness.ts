@@ -1,17 +1,22 @@
-twhy import { registerApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 import { streamSSE } from 'hono/streaming';
-import { coworkerHarness } from '../harness';
+import { harnessPool } from '../harness/pool';
+
+/** Helper: get threadId from query or body, return 400 if missing */
+function getThreadId(c: any): string | null {
+  return c.req.query('threadId') ?? null;
+}
 
 export const harnessRoutes = [
-  // ─── SSE events stream ───────────────────────────────────────────────
+  // ─── SSE events stream (multiplexed — all threads on one connection) ──
   registerApiRoute('/harness/events', {
     method: 'GET',
     handler: async (c) => {
       return streamSSE(c, async (stream) => {
-        const unsubscribe = coworkerHarness.subscribe(async (event) => {
+        const unsubscribe = harnessPool.subscribe(async (threadId, event) => {
           await stream.writeSSE({
             event: event.type,
-            data: JSON.stringify(event),
+            data: JSON.stringify({ ...event, threadId }),
           });
         });
 
@@ -36,22 +41,14 @@ export const harnessRoutes = [
     },
   }),
 
-  // ─── Initialize session ──────────────────────────────────────────────
-  registerApiRoute('/harness/init', {
-    method: 'POST',
-    handler: async (c) => {
-      const thread = await coworkerHarness.selectOrCreateThread();
-      const session = await coworkerHarness.getSession();
-      return c.json({ thread, session });
-    },
-  }),
-
   // ─── Send message (fire-and-forget — response arrives via SSE) ──────
   registerApiRoute('/harness/send', {
     method: 'POST',
     handler: async (c) => {
-      const { content, images } = await c.req.json();
-      coworkerHarness.sendMessage({ content, images }).catch((err) => {
+      const { threadId, content, images } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      harness.sendMessage({ content, images }).catch((err) => {
         console.error('[harness] sendMessage error:', err);
       });
       return c.json({ ok: true });
@@ -62,7 +59,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/abort', {
     method: 'POST',
     handler: async (c) => {
-      coworkerHarness.abort();
+      const { threadId } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const entry = harnessPool.get(threadId);
+      if (entry) entry.harness.abort();
       return c.json({ ok: true });
     },
   }),
@@ -71,8 +71,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/steer', {
     method: 'POST',
     handler: async (c) => {
-      const { content } = await c.req.json();
-      coworkerHarness.steer({ content }).catch((err) => {
+      const { threadId, content } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      harness.steer({ content }).catch((err) => {
         console.error('[harness] steer error:', err);
       });
       return c.json({ ok: true });
@@ -83,8 +85,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/follow-up', {
     method: 'POST',
     handler: async (c) => {
-      const { content } = await c.req.json();
-      coworkerHarness.followUp({ content }).catch((err) => {
+      const { threadId, content } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      harness.followUp({ content }).catch((err) => {
         console.error('[harness] followUp error:', err);
       });
       return c.json({ ok: true });
@@ -95,8 +99,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/switch-mode', {
     method: 'POST',
     handler: async (c) => {
-      const { modeId } = await c.req.json();
-      await coworkerHarness.switchMode({ modeId });
+      const { threadId, modeId } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      await harness.switchMode({ modeId });
       return c.json({ ok: true });
     },
   }),
@@ -105,8 +111,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/switch-model', {
     method: 'POST',
     handler: async (c) => {
-      const { modelId, scope } = await c.req.json();
-      await coworkerHarness.switchModel({ modelId, scope });
+      const { threadId, modelId, scope } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      await harness.switchModel({ modelId, scope });
       return c.json({ ok: true });
     },
   }),
@@ -115,8 +123,13 @@ export const harnessRoutes = [
   registerApiRoute('/harness/tool-approval', {
     method: 'POST',
     handler: async (c) => {
-      const { decision } = await c.req.json();
-      coworkerHarness.respondToToolApproval({ decision });
+      const { threadId, decision } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const entry = harnessPool.get(threadId);
+      if (entry) {
+        entry.harness.respondToToolApproval({ decision });
+        harnessPool.clearToolApproval(threadId);
+      }
       return c.json({ ok: true });
     },
   }),
@@ -125,8 +138,13 @@ export const harnessRoutes = [
   registerApiRoute('/harness/answer', {
     method: 'POST',
     handler: async (c) => {
-      const { questionId, answer } = await c.req.json();
-      coworkerHarness.respondToQuestion({ questionId, answer });
+      const { threadId, questionId, answer } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const entry = harnessPool.get(threadId);
+      if (entry) {
+        entry.harness.respondToQuestion({ questionId, answer });
+        harnessPool.clearQuestion(threadId);
+      }
       return c.json({ ok: true });
     },
   }),
@@ -135,8 +153,13 @@ export const harnessRoutes = [
   registerApiRoute('/harness/plan-approval', {
     method: 'POST',
     handler: async (c) => {
-      const { planId, response } = await c.req.json();
-      await coworkerHarness.respondToPlanApproval({ planId, response });
+      const { threadId, planId, response } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const entry = harnessPool.get(threadId);
+      if (entry) {
+        await entry.harness.respondToPlanApproval({ planId, response });
+        harnessPool.clearPlanApproval(threadId);
+      }
       return c.json({ ok: true });
     },
   }),
@@ -145,9 +168,9 @@ export const harnessRoutes = [
   registerApiRoute('/harness/thread/create', {
     method: 'POST',
     handler: async (c) => {
-      const { title } = await c.req.json();
-      const thread = await coworkerHarness.createThread({ title });
-      return c.json(thread);
+      const { title, channel } = await c.req.json();
+      const { threadId, entry } = await harnessPool.createThread(title, channel);
+      return c.json({ id: threadId });
     },
   }),
 
@@ -155,7 +178,8 @@ export const harnessRoutes = [
     method: 'POST',
     handler: async (c) => {
       const { threadId } = await c.req.json();
-      await coworkerHarness.switchThread({ threadId });
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
       return c.json({ ok: true });
     },
   }),
@@ -163,7 +187,8 @@ export const harnessRoutes = [
   registerApiRoute('/harness/thread/list', {
     method: 'GET',
     handler: async (c) => {
-      const threads = await coworkerHarness.listThreads();
+      const harness = await harnessPool.getAnyHarness();
+      const threads = await harness.listThreads();
       return c.json({ threads });
     },
   }),
@@ -171,8 +196,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/thread/rename', {
     method: 'POST',
     handler: async (c) => {
-      const { title } = await c.req.json();
-      await coworkerHarness.renameThread({ title });
+      const { threadId, title } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      await harness.renameThread({ title });
       return c.json({ ok: true });
     },
   }),
@@ -180,8 +207,11 @@ export const harnessRoutes = [
   registerApiRoute('/harness/thread/messages', {
     method: 'GET',
     handler: async (c) => {
+      const threadId = getThreadId(c);
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
       const limit = c.req.query('limit') ? parseInt(c.req.query('limit')!) : undefined;
-      const messages = await coworkerHarness.listMessages({ limit });
+      const messages = await harness.listMessages({ limit });
       return c.json({ messages });
     },
   }),
@@ -190,7 +220,10 @@ export const harnessRoutes = [
   registerApiRoute('/harness/session', {
     method: 'GET',
     handler: async (c) => {
-      const session = await coworkerHarness.getSession();
+      const threadId = getThreadId(c);
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      const session = await harness.getSession();
       return c.json(session);
     },
   }),
@@ -198,14 +231,19 @@ export const harnessRoutes = [
   registerApiRoute('/harness/state', {
     method: 'GET',
     handler: async (c) => {
-      return c.json(coworkerHarness.getState());
+      const threadId = getThreadId(c);
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const entry = harnessPool.get(threadId);
+      if (!entry) return c.json({});
+      return c.json(entry.harness.getState());
     },
   }),
 
   registerApiRoute('/harness/modes', {
     method: 'GET',
     handler: async (c) => {
-      const modes = coworkerHarness.listModes();
+      const harness = await harnessPool.getAnyHarness();
+      const modes = harness.listModes();
       return c.json({
         modes: modes.map((m) => ({
           id: m.id,
@@ -217,22 +255,37 @@ export const harnessRoutes = [
     },
   }),
 
+  // ─── Status (pending state + run buffer for thread) ───────────────────
+  registerApiRoute('/harness/status', {
+    method: 'GET',
+    handler: async (c) => {
+      const threadId = getThreadId(c);
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      return c.json(harnessPool.getStatus(threadId));
+    },
+  }),
+
   // ─── Permissions ─────────────────────────────────────────────────────
   registerApiRoute('/harness/permissions', {
     method: 'GET',
     handler: async (c) => {
-      return c.json(coworkerHarness.getPermissionRules());
+      const threadId = getThreadId(c);
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      return c.json(harness.getPermissionRules());
     },
   }),
 
   registerApiRoute('/harness/permissions/update', {
     method: 'POST',
     handler: async (c) => {
-      const { category, toolName, policy } = await c.req.json();
+      const { threadId, category, toolName, policy } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
       if (category) {
-        coworkerHarness.setPermissionForCategory({ category, policy });
+        harness.setPermissionForCategory({ category, policy });
       } else if (toolName) {
-        coworkerHarness.setPermissionForTool({ toolName, policy });
+        harness.setPermissionForTool({ toolName, policy });
       }
       return c.json({ ok: true });
     },
@@ -241,9 +294,11 @@ export const harnessRoutes = [
   registerApiRoute('/harness/grants', {
     method: 'POST',
     handler: async (c) => {
-      const { category, toolName } = await c.req.json();
-      if (category) coworkerHarness.grantSessionCategory({ category });
-      if (toolName) coworkerHarness.grantSessionTool({ toolName });
+      const { threadId, category, toolName } = await c.req.json();
+      if (!threadId) return c.json({ error: 'threadId required' }, 400);
+      const { harness } = await harnessPool.getOrCreate(threadId);
+      if (category) harness.grantSessionCategory({ category });
+      if (toolName) harness.grantSessionTool({ toolName });
       return c.json({ ok: true });
     },
   }),

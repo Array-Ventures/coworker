@@ -21,6 +21,7 @@ const whatsAppManager = new WhatsAppManager();
 
 export const mastra = new Mastra({
   agents: { coworkerAgent },
+  memory: coworkerMemory,
   mcpServers: { coworkerMcpServer },
   server: {
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
