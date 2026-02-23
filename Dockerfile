@@ -45,16 +45,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy the self-contained build output (includes its own node_modules)
 COPY --from=builder /app/.mastra/output ./
 
+# Copy Drizzle migrations (runMigrations() reads from ./drizzle at runtime)
+COPY drizzle ./drizzle
+
 # Create non-root user with home on persistent volume
 RUN groupadd -g 1001 nodejs && \
     useradd -u 1001 -g nodejs -d /data/home -s /bin/bash mastra
 
-# Create data directories (workspaces are created by entrypoint using WORKSPACE_PATH)
-RUN mkdir -p /data/home /data/whatsapp-auth /data/gog && \
+# Create data directories
+RUN mkdir -p /data/home /data/whatsapp-auth /data/gog /data/config /data/workspace && \
     chown -R mastra:nodejs /app /data
 
 # Copy built-in skills for seeding into workspace
-COPY docker/builtin-skills /app/builtin-skills
+COPY src/mastra/skills /app/builtin-skills
 
 # Entrypoint: fix volume ownership (mounted as root), then drop to mastra user
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -62,6 +65,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV DATA_PATH=/data
 ENV MASTRA_STUDIO_PATH=./studio
 
 EXPOSE 8080

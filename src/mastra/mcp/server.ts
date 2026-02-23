@@ -4,11 +4,11 @@ import { createUIResource } from "@mcp-ui/server";
 import { z } from "zod";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { coworkerAgent } from "../agents/coworker-agent";
+import { coworkerAgent } from "../agents/coworker/agent";
 
-const AGENT_ID = process.env.AGENT_ID || "coworker";
-const BASE_PATH = process.env.WORKSPACE_PATH || path.resolve("./workspaces");
-const APPS_DIR = path.join(BASE_PATH, AGENT_ID, "apps");
+import { WORKSPACE_PATH } from "../config/paths";
+
+const APPS_DIR = path.join(WORKSPACE_PATH, "apps");
 
 /** Scan the apps directory and return folder names that contain an index.html */
 async function listAppDirs(): Promise<string[]> {

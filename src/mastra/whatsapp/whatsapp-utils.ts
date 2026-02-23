@@ -151,13 +151,16 @@ export function getContextInfo(msg: WAMessage) {
 /**
  * Check if the bot is mentioned in the message's contextInfo.mentionedJid.
  * Compares by number part only (strips :device suffix and @domain).
+ * Accepts an optional botLid for matching LID-format mentions (@lid JIDs).
  */
-export function isBotMentioned(msg: WAMessage, botJid: string): boolean {
+export function isBotMentioned(msg: WAMessage, botJid: string, botLid?: string): boolean {
   const ctx = getContextInfo(msg);
   if (!ctx?.mentionedJid?.length) return false;
-  const botNumber = botJid.split(':')[0].split('@')[0];
+  const botNumbers = new Set<string>();
+  botNumbers.add(botJid.split(':')[0].split('@')[0]);
+  if (botLid) botNumbers.add(botLid.split(':')[0].split('@')[0]);
   return ctx.mentionedJid.some(
-    (jid: string) => jid.split(':')[0].split('@')[0] === botNumber,
+    (jid: string) => botNumbers.has(jid.split(':')[0].split('@')[0]),
   );
 }
 
@@ -395,6 +398,27 @@ export function formatMessageEnvelope(meta: MessageMetadata): string {
   }
   lines.push('</context>');
   return lines.join('\n');
+}
+
+/**
+ * Valid group response modes.
+ * - 'all': respond to every message
+ * - 'mentions': respond only when @mentioned, observe otherwise
+ * - 'observe': never auto-respond, only build context
+ */
+export type GroupMode = 'all' | 'mentions' | 'observe';
+
+/**
+ * Wrap message content with an observe-mode envelope telling the agent
+ * its response will NOT be delivered to the group.
+ */
+export function wrapObserveMode(content: string, groupJid: string): string {
+  return `<observe-mode>
+[OBSERVATION ONLY] Your response will NOT be sent to the group.
+To proactively message this group, use the msg CLI:
+  msg send --channel whatsapp --to "${groupJid}" "your message"
+</observe-mode>
+${content}`;
 }
 
 /**

@@ -1,5 +1,7 @@
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { DATA_PATH } from '../config/paths';
 
 const execFileAsync = promisify(execFile);
 
@@ -7,7 +9,7 @@ const execFileAsync = promisify(execFile);
  * Controlled environment for all gh child processes.
  * HOME is shared with gog so both CLIs persist config under the same data dir.
  */
-const GH_HOME = process.env.GOG_HOME || process.env.HOME || '/data';
+const GH_HOME = join(DATA_PATH, 'gog');
 const GH_ENV: Record<string, string> = {
   PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
   HOME: GH_HOME,

@@ -15,8 +15,7 @@ type FileEntry = {
 }
 
 const MOUNTS = [
-  { name: 'workspace', path: '/workspace', icon: 'folder', color: '#FF8400', description: 'Agent working directory' },
-  { name: 'shared', path: '/shared', icon: 'folder_shared', color: '#2196F3', description: 'Shared across all agents' },
+  { name: 'workspace', path: '/', icon: 'folder', color: '#FF8400', description: 'Agent working directory' },
   { name: 'skills', path: '/.agents/skills', icon: 'construction', color: '#9C27B0', description: 'Installed agent skills' },
 ] as const
 

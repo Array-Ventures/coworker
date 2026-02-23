@@ -1,29 +1,18 @@
 #!/bin/bash
 set -e
 
-WORKSPACE="${WORKSPACE_PATH:-/workspaces}"
+DP="${DATA_PATH:-/data}"
+WS="$DP/workspace"
 
-# Ensure workspace directories exist on the persistent volume
-mkdir -p "$WORKSPACE/shared" "$WORKSPACE/coworker" "$WORKSPACE/skills"
+# Ensure directories exist on the persistent volume
+mkdir -p "$WS/.agents/skills" "$WS/.bin" "$DP/config"
 
 # Fix ownership on top-level dirs only (volume mounts start as root)
-chown mastra:nodejs /data /data/home /data/whatsapp-auth /data/gog \
-  "$WORKSPACE" "$WORKSPACE/shared" "$WORKSPACE/coworker" "$WORKSPACE/skills"
+chown mastra:nodejs "$DP" "$DP/home" "$DP/whatsapp-auth" "$DP/gog" "$DP/config" \
+  "$WS" "$WS/.agents" "$WS/.agents/skills" "$WS/.bin"
 
-# Seed built-in skills (clean copy on every deploy to pick up updates)
-for skill in /app/builtin-skills/*/; do
-  name=$(basename "$skill")
-  rm -rf "$WORKSPACE/skills/$name"
-  cp -r "$skill" "$WORKSPACE/skills/$name"
-done
-
-# Symlink all skill scripts into shared .bin for PATH access
-mkdir -p "$WORKSPACE/.bin"
-rm -f "$WORKSPACE/.bin"/*
-for script in "$WORKSPACE"/skills/*/scripts/*; do
-  [ -f "$script" ] && ln -sf "$script" "$WORKSPACE/.bin/$(basename "$script")"
-done
-chown -R mastra:nodejs "$WORKSPACE/.bin"
+# Built-in skills are seeded by the app on startup (src/mastra/config/seed-skills.ts)
+# No need to copy them here — works for both Docker and local dev.
 
 # Drop to non-root user and exec the CMD
 exec gosu mastra "$@"

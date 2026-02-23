@@ -595,15 +595,24 @@ function WhatsAppSection() {
   const waRemoveAllowlist = useAppStore((s) => s.waRemoveAllowlist)
   const waPair = useAppStore((s) => s.waPair)
 
+  const waGroups = useAppStore((s) => s.waGroups)
+  const loadWaGroups = useAppStore((s) => s.loadWaGroups)
+  const waAddGroup = useAppStore((s) => s.waAddGroup)
+  const waUpdateGroup = useAppStore((s) => s.waUpdateGroup)
+  const waRemoveGroup = useAppStore((s) => s.waRemoveGroup)
+
   const [newPhone, setNewPhone] = useState('')
   const [adding, setAdding] = useState(false)
   const [pairingCode, setPairingCode] = useState('')
   const [pairing, setPairing] = useState(false)
   const [pairingError, setPairingError] = useState('')
+  const [newGroupJid, setNewGroupJid] = useState('')
+  const [addingGroup, setAddingGroup] = useState(false)
   const prevStatusRef = useRef(waStatus.status)
 
   useSliceData(loadWhatsAppStatus)
   useSliceData(loadWaAllowlist)
+  useSliceData(loadWaGroups)
 
   // Manage polling: stop when connected, start for transient states (connecting, qr_ready, logged_out)
   useEffect(() => {
@@ -653,6 +662,17 @@ function WhatsAppSection() {
       }
     } finally {
       setPairing(false)
+    }
+  }
+
+  const handleAddGroup = async () => {
+    if (!newGroupJid.trim()) return
+    setAddingGroup(true)
+    try {
+      await waAddGroup(newGroupJid.trim(), undefined, 'mentions')
+      setNewGroupJid('')
+    } finally {
+      setAddingGroup(false)
     }
   }
 
@@ -753,7 +773,7 @@ function WhatsAppSection() {
           <span className="font-secondary text-[13px] font-medium text-muted">Pair a Contact</span>
         </div>
         <p className="font-secondary text-[12px] text-muted-dim mb-3">
-          When someone messages Coworker on WhatsApp, they receive a pairing code. Enter it here to allow them.
+          When someone sends /pair to Coworker on WhatsApp, they receive a pairing code. Enter it here to allow them.
         </p>
         <div className="flex gap-2">
           <input
@@ -827,6 +847,82 @@ function WhatsAppSection() {
         {(waAllowlist ?? []).length === 0 && (
           <p className="font-secondary text-[13px] text-muted-dim py-2">
             No numbers added yet. Add phone numbers that can message Coworker.
+          </p>
+        )}
+      </div>
+
+      {/* Groups card */}
+      <div className="bg-card border border-border rounded-xl" style={{ padding: 20 }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-secondary text-[13px] font-medium text-muted">Groups</span>
+        </div>
+        <p className="font-secondary text-[12px] text-muted-dim mb-3">
+          Add group JIDs from server logs to allow Coworker to respond in WhatsApp groups.
+        </p>
+
+        {/* Add group form */}
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={newGroupJid}
+            onChange={(e) => setNewGroupJid(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAddGroup()}
+            placeholder="120363001234567890@g.us"
+            className="flex-1 h-9 px-3 bg-transparent border border-border rounded-lg font-primary text-[14px] text-foreground placeholder:text-muted-dim outline-none focus:border-primary"
+          />
+          <button
+            onClick={handleAddGroup}
+            disabled={addingGroup || !newGroupJid.trim()}
+            className="flex items-center gap-1.5 font-secondary text-[13px] font-medium text-foreground border border-border rounded-lg hover:bg-sidebar-accent transition-colors disabled:opacity-50"
+            style={{ height: 36, padding: '0 12px' }}
+          >
+            <span className="material-icon" style={{ fontSize: 16 }}>add</span>
+            Add
+          </button>
+        </div>
+
+        {/* Group items */}
+        {(waGroups ?? []).map((group, i) => (
+          <div
+            key={group.groupJid}
+            className={`flex items-center justify-between gap-3 ${i >= 0 ? 'border-t border-border' : ''}`}
+            style={{ padding: '10px 0' }}
+          >
+            <span className="font-primary text-[14px] text-foreground truncate flex-1" title={group.groupJid}>
+              {group.groupName || group.groupJid}
+            </span>
+            <select
+              value={group.mode}
+              onChange={(e) => waUpdateGroup(group.groupJid, { mode: e.target.value })}
+              className="h-8 px-2 bg-transparent border border-border rounded-lg font-secondary text-[12px] text-foreground outline-none focus:border-primary"
+            >
+              <option value="all">All</option>
+              <option value="mentions">Mentions</option>
+              <option value="observe">Observe</option>
+            </select>
+            <button
+              onClick={() => waUpdateGroup(group.groupJid, { enabled: !group.enabled })}
+              className={`h-8 px-3 rounded-lg font-secondary text-[12px] font-medium border transition-colors ${
+                group.enabled
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'text-muted-dim border-border hover:bg-sidebar-accent'
+              }`}
+            >
+              {group.enabled ? 'On' : 'Off'}
+            </button>
+            <button
+              onClick={() => waRemoveGroup(group.groupJid)}
+              className="text-muted-dim hover:text-red-500 transition-colors"
+              title="Remove"
+            >
+              <span className="material-icon" style={{ fontSize: 18 }}>close</span>
+            </button>
+          </div>
+        ))}
+
+        {(waGroups ?? []).length === 0 && (
+          <p className="font-secondary text-[13px] text-muted-dim py-2">
+            No groups configured. Add a group JID from the server logs.
           </p>
         )}
       </div>
@@ -2121,259 +2217,27 @@ function ChannelsContent() {
 
 /* ── Advanced ── */
 
-type UpdateStatus = {
-  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
-  version?: string
-  percent?: number
-  message?: string
-}
+import AdvancedInstructions from '../components/settings/AdvancedInstructions'
+import AdvancedServer from '../components/settings/AdvancedServer'
+import AdvancedEnvVars from '../components/settings/AdvancedEnvVars'
+import AdvancedUpdates from '../components/settings/AdvancedUpdates'
+
+const advSubTabs = [
+  { label: 'Instructions', icon: 'description' },
+  { label: 'Server', icon: 'dns' },
+  { label: 'Environment', icon: 'key' },
+  { label: 'Updates', icon: 'update' },
+]
 
 function AdvancedContent() {
-  const agentConfig = useAppStore((s) => s.agentConfig)
-  const updateInstructions = useAppStore((s) => s.updateInstructions)
-  const [localInstructions, setLocalInstructions] = useState('')
-  const [savingInstructions, setSavingInstructions] = useState(false)
-  const [savedInstructions, setSavedInstructions] = useState(false)
-  const instructionsInitRef = useRef(false)
-
-  useEffect(() => {
-    if (agentConfig && !instructionsInitRef.current) {
-      setLocalInstructions(agentConfig.instructions)
-      instructionsInitRef.current = true
-    }
-  }, [agentConfig])
-
-  const instructionsDirty = agentConfig ? localInstructions !== agentConfig.instructions : false
-
-  const handleSaveInstructions = async () => {
-    setSavingInstructions(true)
-    try {
-      await updateInstructions(localInstructions)
-      setSavedInstructions(true)
-      setTimeout(() => setSavedInstructions(false), 2000)
-    } finally {
-      setSavingInstructions(false)
-    }
-  }
-
-  const handleResetInstructions = async () => {
-    setSavingInstructions(true)
-    try {
-      await updateInstructions(null)
-      setLocalInstructions(agentConfig?.defaultInstructions ?? '')
-      setSavedInstructions(true)
-      setTimeout(() => setSavedInstructions(false), 2000)
-    } finally {
-      setSavingInstructions(false)
-    }
-  }
-
-  const [serverUrl, setServerUrl] = useState(MASTRA_BASE_URL)
-  const [apiToken, setApiToken] = useState('')
-  const [showToken, setShowToken] = useState(false)
-  const [savingToken, setSavingToken] = useState(false)
-  const [savedToken, setSavedToken] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ status: 'idle' })
-  const [appVersion, setAppVersion] = useState('dev')
-
-  useEffect(() => {
-    ;(window as any).settings?.get('mastraApiToken')?.then((v: string) => v && setApiToken(v))
-    ;(window as any).updater?.getAppVersion?.().then((v: string) => v && setAppVersion(v))
-    const unsub = (window as any).updater?.onUpdateStatus?.((data: any) => {
-      setUpdateStatus(data)
-    })
-    return () => unsub?.()
-  }, [])
-
-  const handleSaveUrl = async () => {
-    const trimmed = serverUrl.replace(/\/+$/, '')
-    setSaving(true)
-    try {
-      await setMastraBaseUrl(trimmed)
-      setServerUrl(trimmed)
-      setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleSaveToken = async () => {
-    setSavingToken(true)
-    try {
-      await setMastraApiToken(apiToken.trim())
-      setSavedToken(true)
-      // Reload after a brief delay so user sees "Saved" before refresh
-      setTimeout(() => window.location.reload(), 600)
-    } finally {
-      setSavingToken(false)
-    }
-  }
-
-  const handleCheckUpdates = () => {
-    setUpdateStatus({ status: 'checking' })
-    ;(window as any).updater?.checkForUpdates()
-  }
-
-  const handleDownload = () => {
-    ;(window as any).updater?.downloadUpdate()
-  }
-
-  const handleInstall = () => {
-    ;(window as any).updater?.installUpdate()
-  }
-
+  const [subTab, setSubTab] = useState('Instructions')
   return (
-    <div className="max-w-[480px] mx-auto flex flex-col gap-10">
-      {/* Base Instructions */}
-      {agentConfig && (
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <h3 className="font-secondary text-[15px] font-medium text-foreground">Base Instructions</h3>
-            {agentConfig.isCustomInstructions && (
-              <button
-                onClick={handleResetInstructions}
-                disabled={savingInstructions}
-                className="font-secondary text-[12px] text-muted hover:text-foreground cursor-pointer bg-transparent border-none p-0"
-              >
-                Reset to default
-              </button>
-            )}
-          </div>
-          <p className="font-secondary text-[13px] text-muted mb-4">
-            System prompt that guides the agent's behavior. Changes take effect on the next message.
-          </p>
-          <textarea
-            value={localInstructions}
-            onChange={(e) => { setLocalInstructions(e.target.value); setSavedInstructions(false) }}
-            rows={8}
-            className="w-full px-3 py-2 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary resize-y"
-          />
-          <div className="flex items-center gap-3 mt-2">
-            <button
-              onClick={handleSaveInstructions}
-              disabled={savingInstructions || !instructionsDirty}
-              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
-            >
-              {savingInstructions ? 'Saving...' : savedInstructions ? 'Saved' : 'Save'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Server Connection */}
-      <div>
-        <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">Server Connection</h3>
-        <p className="font-secondary text-[13px] text-muted mb-4">
-          Connect to a remote Mastra server or use the default local instance.
-        </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={serverUrl}
-            onChange={(e) => { setServerUrl(e.target.value); setSaved(false) }}
-            placeholder="http://localhost:4111"
-            className="flex-1 h-10 px-3 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary"
-          />
-          <button
-            onClick={handleSaveUrl}
-            disabled={saving || serverUrl === MASTRA_BASE_URL}
-            className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
-          >
-            {saving ? 'Saving...' : saved ? 'Saved' : 'Save'}
-          </button>
-        </div>
-        {saved && (
-          <p className="font-secondary text-[12px] text-green-500 mt-2 m-0">
-            Server URL updated. Reload the app for all connections to use the new URL.
-          </p>
-        )}
-        <div className="mt-4">
-          <p className="font-secondary text-[13px] text-muted mb-2">
-            API Token (for authenticated remote servers)
-          </p>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showToken ? 'text' : 'password'}
-                value={apiToken}
-                onChange={(e) => { setApiToken(e.target.value); setSavedToken(false) }}
-                placeholder="Paste your COWORKER_API_TOKEN here"
-                className="w-full h-10 px-3 pr-10 bg-card border border-border rounded-xl font-mono text-[13px] text-foreground outline-none focus:border-primary"
-              />
-              <button
-                onClick={() => setShowToken(!showToken)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center text-muted hover:text-foreground transition-colors"
-                style={{ width: 28, height: 28 }}
-                title={showToken ? 'Hide token' : 'Show token'}
-              >
-                <span className="material-icon" style={{ fontSize: 16 }}>
-                  {showToken ? 'visibility_off' : 'visibility'}
-                </span>
-              </button>
-            </div>
-            <button
-              onClick={handleSaveToken}
-              disabled={savingToken}
-              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover disabled:opacity-40 disabled:cursor-default"
-            >
-              {savingToken ? 'Saving...' : savedToken ? 'Saved' : 'Save'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* App Updates */}
-      <div>
-        <h3 className="font-secondary text-[15px] font-medium text-foreground mb-1">App Updates</h3>
-        <p className="font-secondary text-[13px] text-muted mb-4">
-          Check for new versions and install updates.
-        </p>
-        <div className="flex items-center gap-3">
-          {updateStatus.status === 'idle' || updateStatus.status === 'not-available' || updateStatus.status === 'error' ? (
-            <button
-              onClick={handleCheckUpdates}
-              className="h-10 px-4 bg-card border border-border rounded-xl font-secondary text-[13px] font-medium text-foreground cursor-pointer hover:border-foreground/20"
-            >
-              Check for updates
-            </button>
-          ) : updateStatus.status === 'checking' ? (
-            <span className="font-secondary text-[13px] text-muted">Checking for updates...</span>
-          ) : updateStatus.status === 'available' ? (
-            <button
-              onClick={handleDownload}
-              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover"
-            >
-              Download v{updateStatus.version}
-            </button>
-          ) : updateStatus.status === 'downloading' ? (
-            <div className="flex items-center gap-3">
-              <div className="w-32 h-2 bg-border rounded-full overflow-hidden">
-                <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${updateStatus.percent ?? 0}%` }} />
-              </div>
-              <span className="font-secondary text-[12px] text-muted">{Math.round(updateStatus.percent ?? 0)}%</span>
-            </div>
-          ) : updateStatus.status === 'downloaded' ? (
-            <button
-              onClick={handleInstall}
-              className="h-10 px-4 bg-primary text-primary-foreground border-none rounded-xl font-secondary text-[13px] font-semibold cursor-pointer hover:bg-primary-hover"
-            >
-              Restart & install v{updateStatus.version}
-            </button>
-          ) : null}
-        </div>
-        {updateStatus.status === 'not-available' && (
-          <p className="font-secondary text-[12px] text-muted mt-2 m-0">You're on the latest version.</p>
-        )}
-        {updateStatus.status === 'error' && (
-          <p className="font-secondary text-[12px] text-red-500 mt-2 m-0">Update error: {updateStatus.message}</p>
-        )}
-        <p className="font-secondary text-[11px] text-muted-dim mt-3 m-0">
-          Current version: {appVersion}
-        </p>
-      </div>
+    <div className="flex flex-col" style={{ gap: 20 }}>
+      <FilterTabs tabs={advSubTabs} activeTab={subTab} onTabChange={setSubTab} />
+      {subTab === 'Instructions' && <AdvancedInstructions />}
+      {subTab === 'Server' && <AdvancedServer />}
+      {subTab === 'Environment' && <AdvancedEnvVars />}
+      {subTab === 'Updates' && <AdvancedUpdates />}
     </div>
   )
 }

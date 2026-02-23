@@ -2,6 +2,7 @@ import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { DATA_PATH } from '../config/paths';
 
 const execFileAsync = promisify(execFile);
 
@@ -11,7 +12,7 @@ const execFileAsync = promisify(execFile);
  * - GOG_KEYRING_BACKEND=file: works everywhere (macOS, Linux, Docker)
  * - GOG_KEYRING_PASSWORD: encrypts tokens at rest (empty = unencrypted for local dev)
  */
-const GOG_HOME = process.env.GOG_HOME || process.env.HOME || '/data';
+const GOG_HOME = join(DATA_PATH, 'gog');
 const GOG_ENV: Record<string, string> = {
   PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin',
   HOME: GOG_HOME,

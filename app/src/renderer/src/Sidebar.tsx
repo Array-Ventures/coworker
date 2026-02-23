@@ -10,27 +10,25 @@ const topNav = [
   { id: 'apps', icon: 'apps', label: 'Apps' },
 ]
 
-const bottomNav = [
-  { id: 'settings', icon: 'settings', label: 'Settings' },
-]
-
 function NavItem({
   item,
   active,
   collapsed,
   onClick,
+  badge,
 }: {
   item: { id: string; icon: string; label: string }
   active: boolean
   collapsed: boolean
   onClick: () => void
+  badge?: number
 }) {
   return (
     <button
       onClick={onClick}
       title={collapsed ? item.label : undefined}
       className={[
-        'no-drag flex items-center shrink-0 rounded-xl',
+        'no-drag flex items-center shrink-0 rounded-xl relative',
         'text-[15px] font-secondary transition-colors',
         collapsed ? 'justify-center h-9' : 'gap-3 h-11',
         active
@@ -43,11 +41,25 @@ function NavItem({
         {item.icon}
       </span>
       {!collapsed && <span className="truncate">{item.label}</span>}
+      {badge != null && badge > 0 && (
+        <span
+          className={[
+            'flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-bold font-secondary',
+            collapsed ? 'absolute -top-0.5 -right-0.5 w-4 h-4' : 'ml-auto w-[22px] h-[22px]',
+          ].join(' ')}
+        >
+          {badge > 9 ? '9+' : badge}
+        </span>
+      )}
     </button>
   )
 }
 
-export default memo(function Sidebar() {
+type SidebarProps = {
+  notificationCount?: number
+}
+
+export default memo(function Sidebar({ notificationCount = 0 }: SidebarProps) {
   const currentPage = useAppStore((s) => s.currentPage)
   const collapsed = useAppStore((s) => s.sidebarCollapsed)
   const navigate = useAppStore((s) => s.navigate)
@@ -128,15 +140,19 @@ export default memo(function Sidebar() {
             <span className="material-icon" style={{ fontSize: 20 }}>chevron_right</span>
           </button>
         )}
-        {bottomNav.map((item) => (
-          <NavItem
-            key={item.id}
-            item={item}
-            active={currentPage === item.id}
-            collapsed={collapsed}
-            onClick={() => navigate(item.id)}
-          />
-        ))}
+        <NavItem
+          item={{ id: 'activity', icon: 'notifications', label: 'Activity' }}
+          active={currentPage === 'activity'}
+          collapsed={collapsed}
+          onClick={() => navigate('activity')}
+          badge={notificationCount}
+        />
+        <NavItem
+          item={{ id: 'settings', icon: 'settings', label: 'Settings' }}
+          active={currentPage === 'settings'}
+          collapsed={collapsed}
+          onClick={() => navigate('settings')}
+        />
       </nav>
     </aside>
   )

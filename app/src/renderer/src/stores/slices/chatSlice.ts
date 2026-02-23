@@ -1,37 +1,16 @@
 import type { StateCreator } from 'zustand'
-import type { UIMessage, FileUIPart } from 'ai'
-import type { StorageThreadType } from '@mastra/core/memory'
 import type { AppStore } from '../useAppStore'
+import type { StagedFile } from '../../types/harness'
 import {
   fetchThread,
-  fetchThreadMessages,
   updateThreadTitle,
   deleteThread as deleteThreadApi,
+  MASTRA_BASE_URL,
+  authHeaders,
 } from '../../mastra-client'
-import { serverMessagesToUIMessages } from '../../convert-messages'
 
 export function generateThreadId() {
   return `app-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
-const MESSAGES_PER_PAGE = 40
-
-/** Shared fetch: load first page of messages + thread metadata */
-async function loadThread(threadId: string) {
-  const [msgResult, threadData]: [
-    Awaited<ReturnType<typeof fetchThreadMessages>>,
-    StorageThreadType,
-  ] = await Promise.all([
-    fetchThreadMessages(threadId, 0, MESSAGES_PER_PAGE),
-    fetchThread(threadId),
-  ])
-  // Messages fetched DESC (newest first) — reverse for display (oldest first)
-  const messages = serverMessagesToUIMessages([...msgResult.messages].reverse())
-  return {
-    messages,
-    title: threadData.title || 'New Chat',
-    messagesHasMore: msgResult.hasMore,
-  }
 }
 
 export interface ChatSlice {
@@ -40,26 +19,21 @@ export interface ChatSlice {
   threadTitle: string | undefined
   switchingThread: boolean
   input: string
-  stagedFiles: FileUIPart[]
-  pendingLoad: { messages: UIMessage[]; title: string } | null
-  messagesPage: number
-  messagesHasMore: boolean
-  loadingOlderMessages: boolean
+  stagedFiles: StagedFile[]
 
   // Setters
   setInput: (value: string) => void
   setThreadTitle: (title: string | undefined) => void
-  addFiles: (files: FileUIPart[]) => void
+  addFiles: (files: StagedFile[]) => void
   removeFile: (index: number) => void
   clearFiles: () => void
 
   // Actions
   openThread: (threadId: string) => Promise<void>
-  startNewChat: () => void
+  startNewChat: () => Promise<void>
   refreshThreadTitle: () => void
   updateTitle: (title: string) => Promise<void>
   deleteThread: (threadId: string) => Promise<void>
-  loadOlderMessages: () => Promise<UIMessage[] | null>
 }
 
 export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, get) => ({
@@ -69,10 +43,6 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
   switchingThread: false,
   input: '',
   stagedFiles: [],
-  pendingLoad: null,
-  messagesPage: 0,
-  messagesHasMore: false,
-  loadingOlderMessages: false,
 
   setInput: (value) => set({ input: value }),
   setThreadTitle: (title) => set({ threadTitle: title }),
@@ -88,17 +58,15 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
       switchingThread: true,
       threadId: openThreadId,
       currentPage: 'active-chat',
-      pendingLoad: null,
-      messagesPage: 0,
-      messagesHasMore: false,
-      loadingOlderMessages: false,
     })
+
+    // Thread switching is now UI-only — harness.switchThread() in useHarness
+    // handles message loading via the sync effect in App.tsx
     try {
-      const data = await loadThread(openThreadId)
+      const threadData = await fetchThread(openThreadId)
       set({
-        threadTitle: data.title,
-        pendingLoad: data,
-        messagesHasMore: data.messagesHasMore,
+        threadTitle: threadData.title || 'New Chat',
+        switchingThread: false,
       })
     } catch (err) {
       console.error('Failed to load thread:', err)
@@ -106,15 +74,29 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     }
   },
 
-  startNewChat: () => set({
-    threadId: generateThreadId(),
-    threadTitle: undefined,
-    currentPage: 'active-chat',
-    pendingLoad: null,
-    messagesPage: 0,
-    messagesHasMore: false,
-    loadingOlderMessages: false,
-  }),
+  startNewChat: async () => {
+    try {
+      const res = await fetch(`${MASTRA_BASE_URL}/harness/thread/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      set({
+        threadId: data.threadId,
+        threadTitle: undefined,
+        currentPage: 'active-chat',
+      })
+    } catch (err) {
+      console.error('Failed to create thread:', err)
+      // Fallback: generate client-side ID
+      set({
+        threadId: generateThreadId(),
+        threadTitle: undefined,
+        currentPage: 'active-chat',
+      })
+    }
+  },
 
   refreshThreadTitle: async () => {
     const { threadId } = get()
@@ -149,36 +131,13 @@ export const createChatSlice: StateCreator<AppStore, [], [], ChatSlice> = (set, 
     const prevThreads = threads
     get().removeThread(deleteThreadId)
     if (deleteThreadId === threadId) {
-      set({ threadId: null, threadTitle: undefined, currentPage: 'home', pendingLoad: null })
+      set({ threadId: null, threadTitle: undefined, currentPage: 'home' })
     }
     try {
       await deleteThreadApi(deleteThreadId)
     } catch (err) {
       console.error('Failed to delete thread:', err)
       set({ threads: prevThreads })
-    }
-  },
-
-  loadOlderMessages: async () => {
-    const { threadId, messagesHasMore, loadingOlderMessages } = get()
-    if (!threadId || !messagesHasMore || loadingOlderMessages) return null
-
-    set({ loadingOlderMessages: true })
-    try {
-      const nextPage = get().messagesPage + 1
-      const result = await fetchThreadMessages(threadId, nextPage, MESSAGES_PER_PAGE)
-      // Messages fetched DESC — reverse for display (oldest first)
-      const olderMessages = serverMessagesToUIMessages([...result.messages].reverse())
-      set({
-        messagesPage: nextPage,
-        messagesHasMore: result.hasMore,
-      })
-      return olderMessages
-    } catch (err) {
-      console.error('Failed to load older messages:', err)
-      return null
-    } finally {
-      set({ loadingOlderMessages: false })
     }
   },
 })

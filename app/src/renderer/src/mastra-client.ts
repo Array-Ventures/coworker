@@ -24,7 +24,7 @@ export const AGENT_ID = 'coworker'
 export const RESOURCE_ID = 'coworker'
 
 /** Returns auth headers when a token is configured, empty object otherwise */
-export function authHeaders(): HeadersInit {
+export function authHeaders(): Record<string, string> {
   if (!MASTRA_API_TOKEN) return {}
   return { Authorization: `Bearer ${MASTRA_API_TOKEN}` }
 }
@@ -186,6 +186,7 @@ export async function fetchAgentConfig() {
 export async function updateAgentConfig(body: {
   model?: string | null
   instructions?: string | null
+  sandboxEnv?: Record<string, string> | null
 }) {
   const res = await fetch(`${MASTRA_BASE_URL}/agent-config`, {
     method: 'PUT',
@@ -586,6 +587,45 @@ export async function approveWhatsAppPairing(
     body: JSON.stringify({ code }),
   })
   return res.json()
+}
+
+// ── WhatsApp Groups ──
+
+export interface GroupEntry {
+  groupJid: string
+  groupName: string | null
+  mode: string
+  enabled: boolean
+  createdAt: string
+}
+
+export async function fetchWhatsAppGroups(): Promise<GroupEntry[]> {
+  const res = await fetch(`${MASTRA_BASE_URL}/messaging/groups`, { headers: authHeaders() })
+  const data = await res.json()
+  return data.groups ?? []
+}
+
+export async function addWhatsAppGroup(groupJid: string, groupName?: string, mode?: string): Promise<void> {
+  await fetch(`${MASTRA_BASE_URL}/messaging/groups`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupJid, groupName, mode }),
+  })
+}
+
+export async function updateWhatsAppGroup(groupJid: string, updates: { enabled?: boolean; mode?: string; groupName?: string }): Promise<void> {
+  await fetch(`${MASTRA_BASE_URL}/messaging/groups/${encodeURIComponent(groupJid)}`, {
+    method: 'PUT',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+}
+
+export async function removeWhatsAppGroup(groupJid: string): Promise<void> {
+  await fetch(`${MASTRA_BASE_URL}/messaging/groups/${encodeURIComponent(groupJid)}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
 }
 
 // ── MCP Servers ──

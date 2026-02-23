@@ -29,27 +29,25 @@ export default memo(function ChatsListPage() {
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
-    const channelPrefixes: Record<string, string[]> = {
-      Chat: ['app-'],
-      Scheduled: ['scheduled-'],
-      Text: ['whatsapp-'],
-      Email: ['email-'],
-      API: ['api-'],
+    const channelMap: Record<string, string> = {
+      Chat: 'app',
+      Scheduled: 'scheduled',
+      Text: 'whatsapp',
+      Email: 'email',
+      API: 'api',
     }
 
     return threads.filter((t) => {
-      // Channel filter
+      // Channel filter by thread metadata
       if (filter !== 'All') {
-        const prefixes = channelPrefixes[filter]
-        if (prefixes) {
-          const matchesPrefix = prefixes.some((p) => t.id.startsWith(p))
-          // For 'Chat', also include threads without a known channel prefix (e.g. Studio)
+        const channel = (t.metadata as Record<string, unknown> | undefined)?.channel as string | undefined
+        const expectedChannel = channelMap[filter]
+        if (expectedChannel) {
+          // Chat also includes threads without a channel (legacy/pre-migration)
           if (filter === 'Chat') {
-            const allKnownPrefixes = Object.values(channelPrefixes).flat()
-            const hasKnownPrefix = allKnownPrefixes.some((p) => t.id.startsWith(p))
-            if (!matchesPrefix && hasKnownPrefix) return false
-          } else if (!matchesPrefix) {
-            return false
+            if (channel && channel !== 'app') return false
+          } else {
+            if (channel !== expectedChannel) return false
           }
         }
       }

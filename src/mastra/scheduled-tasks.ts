@@ -1,20 +1,27 @@
 import type { Mastra } from '@mastra/core/mastra';
-import { pool } from './db';
+import { Cron } from 'croner';
+import { readJsonConfig, writeJsonConfig } from './config/fs-config';
 import { createTaskWorkflow } from './workflows/scheduled-task';
 import { toCron, type ScheduleConfig } from './cron-utils';
+
+const TASKS_FILE = 'scheduled-tasks.json';
 
 export interface ScheduledTask {
   id: string;
   name: string;
   scheduleType: string;
   cron: string;
-  scheduleConfig: ScheduleConfig | null;
+  scheduleConfig: string;
   prompt: string;
   notify: boolean;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
   lastRunAt: string | null;
+}
+
+interface TasksFile {
+  tasks: ScheduledTask[];
 }
 
 export interface CreateTaskInput {
@@ -31,48 +38,37 @@ export interface UpdateTaskInput {
   notify?: boolean;
 }
 
-function rowToTask(row: Record<string, any>): ScheduledTask {
-  return {
-    id: row.id,
-    name: row.name,
-    scheduleType: row.schedule_type,
-    cron: row.cron,
-    scheduleConfig: row.schedule_config ? JSON.parse(row.schedule_config) : null,
-    prompt: row.prompt,
-    notify: row.notify === true,
-    enabled: row.enabled === true,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    lastRunAt: row.last_run_at,
-  };
-}
-
 export class ScheduledTaskManager {
   private mastra!: Mastra;
+  private cronJobs = new Map<string, Cron>();
 
   setMastra(mastra: Mastra) {
     this.mastra = mastra;
   }
 
-  async init(): Promise<void> {
-    await this.seedDefaults();
+  private readTasks(): ScheduledTask[] {
+    return readJsonConfig<TasksFile>(TASKS_FILE, { tasks: [] }).tasks;
+  }
 
-    const result = await pool.query(
-      'SELECT * FROM scheduled_tasks WHERE enabled = TRUE',
-    );
-    for (const row of result.rows) {
-      const task = rowToTask(row as Record<string, any>);
-      const workflow = createTaskWorkflow(task.id, task.cron, task.prompt, task.name);
+  private writeTasks(tasks: ScheduledTask[]): void {
+    writeJsonConfig(TASKS_FILE, { tasks });
+  }
+
+  async init(): Promise<void> {
+    this.seedDefaults();
+
+    const tasks = this.readTasks();
+    for (const task of tasks) {
+      if (!task.enabled) continue;
+      const workflow = createTaskWorkflow(task.id);
       this.mastra.addWorkflow(workflow);
+      this.scheduleCron(task);
     }
   }
 
-  private async seedDefaults(): Promise<void> {
-    const existing = await pool.query(
-      'SELECT id FROM scheduled_tasks WHERE id = $1',
-      ['heartbeat'],
-    );
-    if (existing.rows.length > 0) return;
+  private seedDefaults(): void {
+    const tasks = this.readTasks();
+    if (tasks.some((t) => t.id === 'heartbeat')) return;
 
     const prompt = `TRIGGER: Scheduled heartbeat
 No one messaged you. The system woke you up on schedule.
@@ -85,122 +81,153 @@ This is your time. You can:
 - Check workspace files for changes`;
 
     const config: ScheduleConfig = { type: 'custom', cron: '*/30 * * * *' };
+    const now = new Date().toISOString();
 
-    await pool.query(
-      `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify, enabled)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      ['heartbeat', 'Heartbeat', 'custom', '*/30 * * * *', JSON.stringify(config), prompt, false, true],
-    );
+    tasks.push({
+      id: 'heartbeat',
+      name: 'Heartbeat',
+      scheduleType: 'custom',
+      cron: '*/30 * * * *',
+      scheduleConfig: JSON.stringify(config),
+      prompt,
+      notify: false,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      lastRunAt: null,
+    });
+    this.writeTasks(tasks);
+  }
+
+  private scheduleCron(task: ScheduledTask): void {
+    // Stop existing job if any
+    this.cronJobs.get(task.id)?.stop();
+
+    const job = new Cron(task.cron, async () => {
+      await this.executeTask(task.id);
+    });
+    this.cronJobs.set(task.id, job);
+    console.log(`[scheduled-task] scheduled "${task.name}" with cron: ${task.cron}`);
+  }
+
+  private async executeTask(taskId: string): Promise<void> {
+    const task = this.get(taskId);
+    if (!task || !task.enabled) return;
+
+    console.log(`[scheduled-task] executing "${task.name}" (${taskId})`);
+
+    try {
+      const workflow = this.mastra.getWorkflow(`scheduled-task-${taskId}`);
+      const run = await workflow.createRun();
+      await run.start({
+        inputData: { prompt: task.prompt, taskId, taskName: task.name },
+      });
+
+      // Update lastRunAt
+      const tasks = this.readTasks();
+      const idx = tasks.findIndex((t) => t.id === taskId);
+      if (idx >= 0) {
+        tasks[idx].lastRunAt = new Date().toISOString();
+        this.writeTasks(tasks);
+      }
+    } catch (err) {
+      console.error(`[scheduled-task] "${task.name}" failed:`, err instanceof Error ? err.message : err);
+    }
   }
 
   async list(): Promise<ScheduledTask[]> {
-    const result = await pool.query(
-      'SELECT * FROM scheduled_tasks ORDER BY created_at DESC',
+    return this.readTasks().sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     );
-    return result.rows.map((row) => rowToTask(row as Record<string, any>));
   }
 
-  async get(id: string): Promise<ScheduledTask | null> {
-    const result = await pool.query(
-      'SELECT * FROM scheduled_tasks WHERE id = $1',
-      [id],
-    );
-    if (result.rows.length === 0) return null;
-    return rowToTask(result.rows[0] as Record<string, any>);
+  get(id: string): ScheduledTask | null {
+    return this.readTasks().find((t) => t.id === id) ?? null;
   }
 
   async create(input: CreateTaskInput): Promise<ScheduledTask> {
     const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const cron = toCron(input.scheduleConfig);
+    const now = new Date().toISOString();
 
-    await pool.query(
-      `INSERT INTO scheduled_tasks (id, name, schedule_type, cron, schedule_config, prompt, notify)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [
-        id,
-        input.name,
-        input.scheduleConfig.type,
-        cron,
-        JSON.stringify(input.scheduleConfig),
-        input.prompt,
-        input.notify !== false,
-      ],
-    );
+    const task: ScheduledTask = {
+      id,
+      name: input.name,
+      scheduleType: input.scheduleConfig.type,
+      cron,
+      scheduleConfig: JSON.stringify(input.scheduleConfig),
+      prompt: input.prompt,
+      notify: input.notify !== false,
+      enabled: true,
+      createdAt: now,
+      updatedAt: now,
+      lastRunAt: null,
+    };
 
-    const workflow = createTaskWorkflow(id, cron, input.prompt, input.name);
+    const tasks = this.readTasks();
+    tasks.push(task);
+    this.writeTasks(tasks);
+
+    const workflow = createTaskWorkflow(id);
     this.mastra.addWorkflow(workflow);
+    this.scheduleCron(task);
 
-    return (await this.get(id))!;
+    return task;
   }
 
   async update(id: string, data: UpdateTaskInput): Promise<ScheduledTask> {
-    const existing = await this.get(id);
-    if (!existing) throw new Error(`Task ${id} not found`);
+    const tasks = this.readTasks();
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx < 0) throw new Error(`Task ${id} not found`);
 
-    const sets: string[] = [];
-    const args: any[] = [];
-    let paramIndex = 1;
-
-    if (data.name !== undefined) {
-      sets.push(`name = $${paramIndex++}`);
-      args.push(data.name);
-    }
-    if (data.prompt !== undefined) {
-      sets.push(`prompt = $${paramIndex++}`);
-      args.push(data.prompt);
-    }
-    if (data.notify !== undefined) {
-      sets.push(`notify = $${paramIndex++}`);
-      args.push(data.notify);
-    }
+    const task = tasks[idx];
+    if (data.name !== undefined) task.name = data.name;
+    if (data.prompt !== undefined) task.prompt = data.prompt;
+    if (data.notify !== undefined) task.notify = data.notify;
     if (data.scheduleConfig !== undefined) {
-      const cron = toCron(data.scheduleConfig);
-      sets.push(`schedule_type = $${paramIndex++}`, `cron = $${paramIndex++}`, `schedule_config = $${paramIndex++}`);
-      args.push(data.scheduleConfig.type, cron, JSON.stringify(data.scheduleConfig));
+      task.scheduleType = data.scheduleConfig.type;
+      task.cron = toCron(data.scheduleConfig);
+      task.scheduleConfig = JSON.stringify(data.scheduleConfig);
     }
+    task.updatedAt = new Date().toISOString();
+    this.writeTasks(tasks);
 
-    if (sets.length > 0) {
-      sets.push('updated_at = NOW()');
-      args.push(id);
-      await pool.query(
-        `UPDATE scheduled_tasks SET ${sets.join(', ')} WHERE id = $${paramIndex}`,
-        args,
-      );
-    }
-
-    // Re-register workflow with updated config if schedule or prompt changed
+    // Re-register workflow and reschedule if schedule or prompt changed
     if (data.scheduleConfig || data.prompt) {
-      const updated = await this.get(id);
-      if (updated && updated.enabled) {
-        const workflow = createTaskWorkflow(id, updated.cron, updated.prompt, updated.name);
+      if (task.enabled) {
+        const workflow = createTaskWorkflow(id);
         this.mastra.addWorkflow(workflow);
+        this.scheduleCron(task);
       }
     }
 
-    return (await this.get(id))!;
+    return task;
   }
 
   async delete(id: string): Promise<void> {
-    await pool.query(
-      'DELETE FROM scheduled_tasks WHERE id = $1',
-      [id],
-    );
-    // Workflow remains in mastra memory until restart, but won't re-register on next boot
+    const tasks = this.readTasks().filter((t) => t.id !== id);
+    this.writeTasks(tasks);
+    this.cronJobs.get(id)?.stop();
+    this.cronJobs.delete(id);
   }
 
   async toggle(id: string, enabled: boolean): Promise<void> {
-    await pool.query(
-      'UPDATE scheduled_tasks SET enabled = $1, updated_at = NOW() WHERE id = $2',
-      [enabled, id],
-    );
+    const tasks = this.readTasks();
+    const idx = tasks.findIndex((t) => t.id === id);
+    if (idx < 0) throw new Error(`Task ${id} not found`);
+
+    tasks[idx].enabled = enabled;
+    tasks[idx].updatedAt = new Date().toISOString();
+    this.writeTasks(tasks);
 
     if (enabled) {
-      const task = await this.get(id);
-      if (task) {
-        const workflow = createTaskWorkflow(id, task.cron, task.prompt, task.name);
-        this.mastra.addWorkflow(workflow);
-      }
+      const task = tasks[idx];
+      const workflow = createTaskWorkflow(id);
+      this.mastra.addWorkflow(workflow);
+      this.scheduleCron(task);
+    } else {
+      this.cronJobs.get(id)?.stop();
+      this.cronJobs.delete(id);
     }
-    // When disabling: workflow stays in memory but will be excluded on restart
   }
 }

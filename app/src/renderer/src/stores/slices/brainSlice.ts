@@ -20,6 +20,7 @@ export interface AgentConfigState {
   instructions: string
   defaultInstructions: string
   isCustomInstructions: boolean
+  sandboxEnv: Record<string, string>
 }
 
 export interface BrainSlice {
@@ -34,6 +35,7 @@ export interface BrainSlice {
   updateBrainField: (section: 'persona' | 'org', field: string, value: string) => Promise<void>
   updateModel: (model: string | null) => Promise<void>
   updateInstructions: (instructions: string | null) => Promise<void>
+  updateSandboxEnv: (env: Record<string, string>) => Promise<void>
   loadObservationalMemory: () => Promise<void>
 }
 
@@ -63,6 +65,7 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           instructions: config.instructions,
           defaultInstructions: config.defaultInstructions,
           isCustomInstructions: config.isCustomInstructions,
+          sandboxEnv: config.sandboxEnv ?? {},
         },
         providers: (providerList as Provider[]).sort((a, b) => {
           if (a.connected !== b.connected) return a.connected ? -1 : 1
@@ -99,6 +102,26 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
     }
   },
 
+  updateSandboxEnv: async (env) => {
+    const prev = get().agentConfig
+    try {
+      const config = await updateAgentConfig({ sandboxEnv: env })
+      set({
+        agentConfig: {
+          model: config.model,
+          defaultModel: config.defaultModel,
+          isCustomModel: config.isCustomModel,
+          instructions: config.instructions,
+          defaultInstructions: config.defaultInstructions,
+          isCustomInstructions: config.isCustomInstructions,
+          sandboxEnv: config.sandboxEnv ?? {},
+        },
+      })
+    } catch {
+      if (prev) set({ agentConfig: prev })
+    }
+  },
+
   loadObservationalMemory: async () => {
     try {
       const record = await fetchObservationalMemory()
@@ -120,6 +143,7 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           instructions: config.instructions,
           defaultInstructions: config.defaultInstructions,
           isCustomInstructions: config.isCustomInstructions,
+          sandboxEnv: config.sandboxEnv ?? {},
         },
       })
     } catch {
@@ -139,6 +163,7 @@ export const createBrainSlice: StateCreator<AppStore, [], [], BrainSlice> = (set
           instructions: config.instructions,
           defaultInstructions: config.defaultInstructions,
           isCustomInstructions: config.isCustomInstructions,
+          sandboxEnv: config.sandboxEnv ?? {},
         },
       })
     } catch {

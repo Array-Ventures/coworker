@@ -5,14 +5,7 @@ services:
     ports:
       - '127.0.0.1:8080:8080'
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/postgres
-      - INNGEST_BASE_URL=http://inngest:8288
-      - INNGEST_DEV=0
-      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:-local-event-key}
-      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:-local-signing-key}
-      - WORKSPACE_PATH=/workspaces
-      - WHATSAPP_AUTH_DIR=/data/whatsapp-auth
-      - GOG_HOME=/data/gog
+      - DATA_PATH=/data
       - GOG_KEYRING_PASSWORD=${GOG_KEYRING_PASSWORD:-}
       - MODEL=${MODEL:-}
       - AGENT_ID=${AGENT_ID:-}
@@ -24,48 +17,6 @@ services:
       - KIMI_API_KEY=${KIMI_API_KEY:-}
     volumes:
       - data:/data
-      - workspaces:/workspaces
-    depends_on:
-      - inngest
-      - postgres
-      - redis
-
-  inngest:
-    image: inngest/inngest:latest
-    command: inngest start
-    ports:
-      - '127.0.0.1:8288:8288'
-    environment:
-      - INNGEST_PORT=8288
-      - INNGEST_EVENT_KEY=${INNGEST_EVENT_KEY:-local-event-key}
-      - INNGEST_SIGNING_KEY=${INNGEST_SIGNING_KEY:-local-signing-key}
-      - INNGEST_SDK_URL=http://coworker:8080/api/inngest
-      - INNGEST_POLL_INTERVAL=1
-      - INNGEST_POSTGRES_URI=postgresql://postgres:postgres@postgres:5432/postgres
-      - INNGEST_REDIS_URI=redis://redis:6379
-    depends_on:
-      - postgres
-      - redis
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - '127.0.0.1:5432:5432'
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - '127.0.0.1:6379:6379'
-    volumes:
-      - redisdata:/data
 
 volumes:
   data:
-  workspaces:
-  pgdata:
-  redisdata:

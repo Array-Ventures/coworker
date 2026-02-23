@@ -1,8 +1,8 @@
 import { memo } from 'react'
-import type { FileUIPart } from 'ai'
+import type { StagedFile } from '../types/harness'
 
 type StagedFilesProps = {
-  files: FileUIPart[]
+  files: StagedFile[]
   onRemove: (index: number) => void
 }
 

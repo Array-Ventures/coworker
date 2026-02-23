@@ -1,6 +1,11 @@
 import { describe, expect, test, mock } from 'bun:test';
 import { WhatsAppChannel } from '../whatsapp-channel';
 import type { ChannelStatus } from '../../messaging/router';
+import { WhatsAppStore, type AllowlistEntry, type WhatsAppData } from '../whatsapp-store';
+
+function makeStoreData(allowlist: AllowlistEntry[] = []): WhatsAppData {
+  return { allowlist, pairings: [], config: {}, groups: [] };
+}
 
 function createMockBridge() {
   return {
@@ -8,34 +13,32 @@ function createMockBridge() {
   };
 }
 
-function createMockPool(rows: any[] = []) {
-  return {
-    query: mock(async () => ({ rows })),
-  };
+function createChannel(bridge: ReturnType<typeof createMockBridge>, opts: { allowlist?: AllowlistEntry[] } = {}) {
+  const store = new WhatsAppStore(makeStoreData(opts.allowlist ?? []));
+  const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
+  return { channel, store };
 }
 
 describe('WhatsAppChannel', () => {
-  // ── JID Resolution ──
+  // -- JID Resolution --
 
   test('send() resolves phone to stored LID JID from allowlist', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool([{ raw_jid: '54941422981120@lid' }]);
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge, {
+      allowlist: [{ phoneNumber: '+54941422981120', rawJid: '54941422981120@lid', label: null, createdAt: new Date().toISOString() }],
+    });
 
     const result = await channel.send('+54941422981120', 'Hello');
 
     expect(result).toEqual({ ok: true, messageId: 'msg-123' });
     expect(bridge.sendOutbound).toHaveBeenCalledWith('54941422981120@lid', 'Hello', undefined);
-    expect(pool.query).toHaveBeenCalledWith(
-      'SELECT raw_jid FROM whatsapp_allowlist WHERE phone_number = $1',
-      ['+54941422981120'],
-    );
   });
 
   test('send() uses standard JID when allowlisted but no raw_jid stored', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool([{ raw_jid: null }]);
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge, {
+      allowlist: [{ phoneNumber: '+1234567890', rawJid: null, label: null, createdAt: new Date().toISOString() }],
+    });
 
     const result = await channel.send('+1234567890', 'Hi');
 
@@ -45,72 +48,78 @@ describe('WhatsAppChannel', () => {
 
   test('send() rejects phone not in allowlist', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool([]);  // no rows = not in allowlist
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge);
 
     await expect(channel.send('+9999999999', 'Hi')).rejects.toThrow('Contact +9999999999 not in allowlist');
     expect(bridge.sendOutbound).not.toHaveBeenCalled();
   });
 
-  test('send() passes through raw JID without DB lookup', async () => {
+  test('send() passes through raw JID without store lookup', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const store = new WhatsAppStore(makeStoreData());
+    const spy = mock(() => store.getAllowlistEntry.call(store));
+    store.getAllowlistEntry = spy as any;
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
     await channel.send('54941422981120@lid', 'Direct');
 
     expect(bridge.sendOutbound).toHaveBeenCalledWith('54941422981120@lid', 'Direct', undefined);
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
   });
 
-  test('send() passes through standard JID without DB lookup', async () => {
+  test('send() passes through standard JID without store lookup', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const store = new WhatsAppStore(makeStoreData());
+    const spy = mock(() => store.getAllowlistEntry.call(store));
+    store.getAllowlistEntry = spy as any;
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
     await channel.send('1234567890@s.whatsapp.net', 'Hi');
 
     expect(bridge.sendOutbound).toHaveBeenCalledWith('1234567890@s.whatsapp.net', 'Hi', undefined);
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
   });
 
-  test('send() passes through group JID without DB lookup', async () => {
+  test('send() passes through group JID without store lookup', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const store = new WhatsAppStore(makeStoreData());
+    const spy = mock(() => store.getAllowlistEntry.call(store));
+    store.getAllowlistEntry = spy as any;
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
     await channel.send('120363001234@g.us', 'Group msg');
 
     expect(bridge.sendOutbound).toHaveBeenCalledWith('120363001234@g.us', 'Group msg', undefined);
-    expect(pool.query).not.toHaveBeenCalled();
+    expect(spy).not.toHaveBeenCalled();
   });
 
-  test('send() propagates DB errors', async () => {
+  test('send() propagates store errors', async () => {
     const bridge = createMockBridge();
-    const pool = { query: mock(async () => { throw new Error('connection refused'); }) };
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const store = new WhatsAppStore(makeStoreData());
+    store.getAllowlistEntry = () => { throw new Error('disk error'); };
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
 
-    await expect(channel.send('+1234567890', 'Hi')).rejects.toThrow('connection refused');
+    await expect(channel.send('+1234567890', 'Hi')).rejects.toThrow('disk error');
     expect(bridge.sendOutbound).not.toHaveBeenCalled();
   });
 
   test('send() normalizes bare digits to +digits for lookup', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool([{ raw_jid: '1234567890@s.whatsapp.net' }]);
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge, {
+      allowlist: [{ phoneNumber: '+1234567890', rawJid: '1234567890@s.whatsapp.net', label: null, createdAt: new Date().toISOString() }],
+    });
 
     await channel.send('1234567890', 'Hi');
 
-    expect(pool.query).toHaveBeenCalledWith(
-      'SELECT raw_jid FROM whatsapp_allowlist WHERE phone_number = $1',
-      ['+1234567890'],
-    );
+    // Verify the bridge received the correct JID resolved from allowlist
+    expect(bridge.sendOutbound).toHaveBeenCalledWith('1234567890@s.whatsapp.net', 'Hi', undefined);
   });
 
   test('send() forwards opts to bridge', async () => {
     const bridge = createMockBridge();
-    const pool = createMockPool([{ raw_jid: '1234567890@s.whatsapp.net' }]);
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge, {
+      allowlist: [{ phoneNumber: '+1234567890', rawJid: '1234567890@s.whatsapp.net', label: null, createdAt: new Date().toISOString() }],
+    });
     const opts = { replyTo: 'msg-1' };
 
     await channel.send('+1234567890', 'Reply', opts);
@@ -121,28 +130,29 @@ describe('WhatsAppChannel', () => {
   test('send() propagates bridge errors (router catches them)', async () => {
     const bridge = createMockBridge();
     bridge.sendOutbound = mock(async () => { throw new Error('Socket closed'); });
-    const pool = createMockPool([{ raw_jid: '1234567890@s.whatsapp.net' }]);
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const { channel } = createChannel(bridge, {
+      allowlist: [{ phoneNumber: '+1234567890', rawJid: '1234567890@s.whatsapp.net', label: null, createdAt: new Date().toISOString() }],
+    });
 
     await expect(channel.send('+1234567890', 'Hi')).rejects.toThrow('Socket closed');
   });
 
-  // ── Status ──
+  // -- Status --
 
   test('getStatus() delegates to statusFn', () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
+    const store = new WhatsAppStore(makeStoreData());
     const status: ChannelStatus = { connected: true, account: '+1234567890' };
-    const channel = new WhatsAppChannel(bridge as any, () => status, pool);
+    const channel = new WhatsAppChannel(bridge as any, () => status, store);
 
     expect(channel.getStatus()).toEqual(status);
   });
 
   test('getStatus() reflects dynamic state changes', () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
+    const store = new WhatsAppStore(makeStoreData());
     let connected = true;
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected }), pool);
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected }), store);
 
     expect(channel.getStatus().connected).toBe(true);
     connected = false;
@@ -151,8 +161,8 @@ describe('WhatsAppChannel', () => {
 
   test('id is whatsapp', () => {
     const bridge = createMockBridge();
-    const pool = createMockPool();
-    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), pool);
+    const store = new WhatsAppStore(makeStoreData());
+    const channel = new WhatsAppChannel(bridge as any, () => ({ connected: true }), store);
     expect(channel.id).toBe('whatsapp');
   });
 });

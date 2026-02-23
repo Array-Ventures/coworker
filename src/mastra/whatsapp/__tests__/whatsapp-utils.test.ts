@@ -15,6 +15,7 @@ import {
   formatMessageEnvelope,
   containsNoReply,
   stripDirectives,
+  wrapObserveMode,
   type MediaAttachment,
 } from '../whatsapp-utils';
 import type { WAMessage } from '@whiskeysockets/baileys';
@@ -290,6 +291,48 @@ describe('isBotMentioned', () => {
     });
     expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(true);
   });
+
+  test('matches LID mention via botLid parameter', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['214542927831175@lid'] },
+      },
+    });
+    // Phone JID doesn't match LID, but botLid does
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net')).toBe(false);
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net', '214542927831175:0@lid')).toBe(true);
+  });
+
+  test('matches when mentionedJid uses LID with device suffix and botLid has device suffix', () => {
+    const msg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['214542927831175:2@lid'] },
+      },
+    });
+    expect(isBotMentioned(msg, '1234567890@s.whatsapp.net', '214542927831175:0@lid')).toBe(true);
+  });
+
+  test('matches either phone JID or LID when both provided', () => {
+    // Phone JID mention matches via botJid
+    const phoneMsg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['1234567890@s.whatsapp.net'] },
+      },
+    });
+    expect(isBotMentioned(phoneMsg, '1234567890@s.whatsapp.net', '214542927831175:0@lid')).toBe(true);
+
+    // LID mention matches via botLid
+    const lidMsg = makeMsg({
+      extendedTextMessage: {
+        text: '@bot hello',
+        contextInfo: { mentionedJid: ['214542927831175@lid'] },
+      },
+    });
+    expect(isBotMentioned(lidMsg, '1234567890@s.whatsapp.net', '214542927831175:0@lid')).toBe(true);
+  });
 });
 
 // ── getContextInfo ──
@@ -516,6 +559,24 @@ describe('stripDirectives', () => {
 
   test('trims result', () => {
     expect(stripDirectives('  <no-reply/> Hello  ')).toBe('Hello');
+  });
+});
+
+// ── wrapObserveMode ──
+
+describe('wrapObserveMode', () => {
+  test('wraps content with observe envelope', () => {
+    const result = wrapObserveMode('Hello group', '120363001234@g.us');
+    expect(result).toContain('OBSERVATION ONLY');
+    expect(result).toContain('msg send --channel whatsapp --to "120363001234@g.us"');
+    expect(result).toContain('Hello group');
+  });
+
+  test('observe envelope appears before content', () => {
+    const result = wrapObserveMode('test content', '123@g.us');
+    const observeIdx = result.indexOf('<observe-mode>');
+    const contentIdx = result.indexOf('test content');
+    expect(observeIdx).toBeLessThan(contentIdx);
   });
 });
 

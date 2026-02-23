@@ -1,9 +1,9 @@
-import { PostgresStore, PgVector } from "@mastra/pg";
+import { LibSQLVector } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
 import { SemanticRecall } from "@mastra/core/processors";
 import { fastembed } from "@mastra/fastembed";
 import { z } from "zod";
-import { DB_URL } from "./db";
+import { storage, DB_URL } from "./db";
 
 // ── Working Memory Schema ──
 // Schema mode uses merge semantics — the agent only sends fields it wants to update.
@@ -73,19 +73,14 @@ when something moves me I get quiet about it, not loud.`,
   },
 };
 
-// ── Shared storage & vector instances ──
-const coworkerStorage = new PostgresStore({
-  id: "coworker-storage",
-  connectionString: DB_URL,
-});
-
-const coworkerVector = new PgVector({
+// ── Shared vector instance ──
+const coworkerVector = new LibSQLVector({
   id: "coworker-vector",
-  connectionString: DB_URL,
+  url: DB_URL,
 });
 
 export const coworkerMemory = new Memory({
-  storage: coworkerStorage,
+  storage,
   options: {
     generateTitle: true,
     semanticRecall: true,
@@ -116,7 +111,7 @@ let _semanticRecall: SemanticRecall | null = null;
 export async function getSemanticRecall(): Promise<SemanticRecall> {
   if (_semanticRecall) return _semanticRecall;
 
-  const memoryStore = await coworkerStorage.getStore("memory");
+  const memoryStore = await storage.getStore("memory");
   if (!memoryStore) throw new Error("Memory storage domain not available");
 
   _semanticRecall = new SemanticRecall({

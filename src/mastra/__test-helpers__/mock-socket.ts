@@ -47,7 +47,7 @@ export function createMockSocket(opts: MockSocketOptions = {}) {
       subject: 'Test Group',
       participants: [{ id: '1234567890@s.whatsapp.net', admin: null }],
     })),
-    user: { id: '1234567890:1@s.whatsapp.net' },
+    user: { id: '1234567890:1@s.whatsapp.net', lid: '214542927831175:0@lid' },
   };
 
   return { socket, sentMessages, presenceUpdates, ev };

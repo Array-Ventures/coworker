@@ -1,34 +1,51 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import type { UIMessage } from 'ai'
+import type { HarnessMessage, TaskItem } from '../types/harness'
+import type { ToolState, SubagentState } from '../types/harness'
 import { useAppStore } from '../stores/useAppStore'
 import PageShell from '../components/PageShell'
 import MessageBubble from '../components/MessageBubble'
 import ChatInput from '../components/ChatInput'
 import NewChatButton from '../components/NewChatButton'
 import ThreadSwitcher from '../components/ThreadSwitcher'
+import TaskProgress from '../components/TaskProgress'
 
 type ActiveChatPageProps = {
-  messages: UIMessage[]
-  setMessages: (messages: UIMessage[]) => void
+  messages: HarnessMessage[]
   onSend: () => void
   onStop: () => void
-  error?: Error
-  onClearError: () => void
+  error: Error | null
   isLoading: boolean
   isDark?: boolean
-  onToolApprovalResponse: (opts: { id: string; approved: boolean; reason?: string }) => void | PromiseLike<void>
+  toolStates: Map<string, ToolState>
+  subagentStates: Map<string, SubagentState>
+  pendingQuestion: { questionId: string; question: string; options?: { label: string; description?: string }[] } | null
+  pendingToolApproval: { toolCallId: string; toolName: string; args: unknown } | null
+  pendingPlanApproval: { planId: string; title: string; plan: string } | null
+  tasks: TaskItem[]
+  onResolveToolApproval: (decision: 'approve' | 'decline' | 'always_allow_category') => void
+  onRespondToQuestion: (questionId: string, answer: string) => void
+  onRespondToPlanApproval: (planId: string, response: { action: 'approved' | 'rejected'; feedback?: string }) => void
+  currentModeId: string
+  onSwitchMode: (modeId: string) => void
 }
 
 export default memo(function ActiveChatPage({
   messages,
-  setMessages,
   onSend,
   onStop,
   error,
-  onClearError,
   isLoading,
   isDark = true,
-  onToolApprovalResponse,
+  toolStates,
+  subagentStates,
+  pendingQuestion,
+  tasks,
+  pendingPlanApproval,
+  onResolveToolApproval,
+  onRespondToQuestion,
+  onRespondToPlanApproval,
+  currentModeId,
+  onSwitchMode,
 }: ActiveChatPageProps) {
   const threadTitle = useAppStore((s) => s.threadTitle)
   const switchingThread = useAppStore((s) => s.switchingThread)
@@ -37,9 +54,6 @@ export default memo(function ActiveChatPage({
   const updateTitle = useAppStore((s) => s.updateTitle)
   const deleteThread = useAppStore((s) => s.deleteThread)
   const threadId = useAppStore((s) => s.threadId)
-  const messagesHasMore = useAppStore((s) => s.messagesHasMore)
-  const loadingOlderMessages = useAppStore((s) => s.loadingOlderMessages)
-  const loadOlderMessages = useAppStore((s) => s.loadOlderMessages)
 
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
@@ -47,12 +61,9 @@ export default memo(function ActiveChatPage({
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const topSentinelRef = useRef<HTMLDivElement>(null)
   const prevMessagesLenRef = useRef(0)
-  const messagesRef = useRef(messages)
-  messagesRef.current = messages
 
-  // Auto-scroll to bottom on new messages (but not when loading older)
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (messages.length > prevMessagesLenRef.current || prevMessagesLenRef.current === 0) {
       const container = scrollContainerRef.current
@@ -65,32 +76,6 @@ export default memo(function ActiveChatPage({
     }
     prevMessagesLenRef.current = messages.length
   }, [messages])
-
-  // Scroll-up loading — fetch older messages when top sentinel is visible
-  useEffect(() => {
-    const el = topSentinelRef.current
-    const container = scrollContainerRef.current
-    if (!el || !container || !messagesHasMore) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return
-        const prevScrollHeight = container.scrollHeight
-        loadOlderMessages().then((olderMessages) => {
-          if (olderMessages && olderMessages.length > 0) {
-            setMessages([...olderMessages, ...messagesRef.current])
-            // Preserve scroll position after prepending
-            requestAnimationFrame(() => {
-              container.scrollTop = container.scrollHeight - prevScrollHeight
-            })
-          }
-        })
-      },
-      { root: container, rootMargin: '100px 0px 0px 0px' },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [messagesHasMore, loadOlderMessages, setMessages])
 
   const startEditing = useCallback(() => {
     setEditValue(threadTitle || '')
@@ -175,27 +160,14 @@ export default memo(function ActiveChatPage({
           <div className="flex items-center gap-2 px-12 py-2 bg-error-bg shrink-0">
             <span className="material-icon text-error" style={{ fontSize: 16 }}>error</span>
             <span className="text-error text-[13px] font-secondary flex-1">{error.message}</span>
-            <button
-              onClick={onClearError}
-              className="text-muted-dim hover:text-foreground text-[13px] font-secondary"
-            >
-              Dismiss
-            </button>
           </div>
         )}
 
         {/* Messages area */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-12 py-8 flex flex-col gap-6 min-h-0">
-          {messagesHasMore && (
-            <div ref={topSentinelRef} className="flex justify-center py-2">
-              {loadingOlderMessages && (
-                <span className="text-muted-dim text-sm font-secondary">Loading older messages...</span>
-              )}
-            </div>
-          )}
           {messages.length === 0 && !switchingThread && (
             <div className="text-muted text-center text-sm font-secondary flex-1 flex items-center justify-center">
-              Send a message to start coding with your agent.
+              Send a message to start working with your agent.
             </div>
           )}
           {switchingThread && (
@@ -209,11 +181,33 @@ export default memo(function ActiveChatPage({
               message={message}
               isStreaming={isLoading && index === messages.length - 1 && message.role === 'assistant'}
               isDark={isDark}
-              onToolApprovalResponse={onToolApprovalResponse}
+              toolStates={toolStates}
+              subagentStates={subagentStates}
+              onResolveToolApproval={onResolveToolApproval}
             />
           ))}
+
+          {/* Inline question prompt */}
+          {pendingQuestion && (
+            <QuestionPrompt
+              question={pendingQuestion}
+              onRespond={onRespondToQuestion}
+            />
+          )}
+
+          {/* Plan approval prompt */}
+          {pendingPlanApproval && (
+            <PlanReview
+              plan={pendingPlanApproval}
+              onRespond={onRespondToPlanApproval}
+            />
+          )}
+
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Task progress (between messages and input, hidden when empty/all done) */}
+        <TaskProgress tasks={tasks} />
 
         {/* Reply input */}
         <div className="px-12 py-4 pb-6 shrink-0">
@@ -226,9 +220,174 @@ export default memo(function ActiveChatPage({
             disabled={isLoading || switchingThread}
             variant="reply"
             placeholder="Reply..."
+            currentModeId={currentModeId}
+            onModeSwitch={onSwitchMode}
           />
         </div>
       </div>
     </PageShell>
   )
 })
+
+// ─── Inline Question Prompt ────────────────────────────────────────────────
+
+function QuestionPrompt({
+  question,
+  onRespond,
+}: {
+  question: { questionId: string; question: string; options?: { label: string; description?: string }[] }
+  onRespond: (questionId: string, answer: string) => void
+}) {
+  const [freeText, setFreeText] = useState('')
+
+  return (
+    <div className="self-start w-full">
+      <div className="bg-card border border-primary rounded-lg p-4 max-w-[600px]">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="material-icon text-primary" style={{ fontSize: 18 }}>help</span>
+          <span className="font-secondary text-[14px] font-medium text-foreground">
+            Coworker has a question
+          </span>
+        </div>
+        <p className="font-secondary text-[14px] text-foreground mb-3">{question.question}</p>
+
+        {question.options && question.options.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {question.options.map((opt, i) => (
+              <button
+                key={i}
+                onClick={() => onRespond(question.questionId, opt.label)}
+                className="flex flex-col items-start bg-secondary hover:bg-background border border-border rounded-lg px-3 py-2 transition-colors"
+              >
+                <span className="font-secondary text-[13px] font-medium text-foreground">{opt.label}</span>
+                {opt.description && (
+                  <span className="font-secondary text-[11px] text-muted">{opt.description}</span>
+                )}
+              </button>
+            ))}
+            <div className="flex gap-2 mt-1">
+              <input
+                value={freeText}
+                onChange={(e) => setFreeText(e.target.value)}
+                placeholder="Or type your answer..."
+                className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 font-secondary text-[13px] text-foreground outline-none focus:border-primary"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && freeText.trim()) {
+                    onRespond(question.questionId, freeText.trim())
+                  }
+                }}
+              />
+              <button
+                onClick={() => freeText.trim() && onRespond(question.questionId, freeText.trim())}
+                disabled={!freeText.trim()}
+                className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 font-secondary text-[13px] font-semibold disabled:opacity-50"
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              value={freeText}
+              onChange={(e) => setFreeText(e.target.value)}
+              placeholder="Type your answer..."
+              autoFocus
+              className="flex-1 bg-background border border-border rounded-lg px-3 py-1.5 font-secondary text-[13px] text-foreground outline-none focus:border-primary"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && freeText.trim()) {
+                  onRespond(question.questionId, freeText.trim())
+                }
+              }}
+            />
+            <button
+              onClick={() => freeText.trim() && onRespond(question.questionId, freeText.trim())}
+              disabled={!freeText.trim()}
+              className="bg-primary text-primary-foreground rounded-lg px-3 py-1.5 font-secondary text-[13px] font-semibold disabled:opacity-50"
+            >
+              Send
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Plan Review Prompt ────────────────────────────────────────────────────
+
+function PlanReview({
+  plan,
+  onRespond,
+}: {
+  plan: { planId: string; title: string; plan: string }
+  onRespond: (planId: string, response: { action: 'approved' | 'rejected'; feedback?: string }) => void
+}) {
+  const [feedback, setFeedback] = useState('')
+  const [showFeedback, setShowFeedback] = useState(false)
+
+  return (
+    <div className="self-start w-full">
+      <div className="bg-card border border-primary rounded-lg overflow-hidden max-w-[700px]">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+          <span className="material-icon text-primary" style={{ fontSize: 18 }}>assignment</span>
+          <span className="font-secondary text-[14px] font-medium text-foreground">
+            {plan.title || 'Plan Review'}
+          </span>
+        </div>
+
+        <div className="px-4 py-3 max-h-[400px] overflow-y-auto">
+          <pre className="font-secondary text-[13px] text-foreground leading-relaxed whitespace-pre-wrap">
+            {plan.plan}
+          </pre>
+        </div>
+
+        <div className="border-t border-border px-4 py-3">
+          {showFeedback ? (
+            <div className="flex flex-col gap-2">
+              <textarea
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                placeholder="What should be changed?"
+                autoFocus
+                className="bg-background border border-border rounded-lg px-3 py-2 font-secondary text-[13px] text-foreground outline-none focus:border-primary resize-none"
+                rows={3}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => onRespond(plan.planId, { action: 'rejected', feedback: feedback.trim() || undefined })}
+                  className="bg-destructive text-white rounded-lg px-3 py-1.5 font-secondary text-[13px] font-semibold"
+                >
+                  Reject with Feedback
+                </button>
+                <button
+                  onClick={() => setShowFeedback(false)}
+                  className="bg-secondary text-muted rounded-lg px-3 py-1.5 font-secondary text-[13px] font-semibold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={() => onRespond(plan.planId, { action: 'approved' })}
+                className="flex items-center gap-1 bg-primary text-primary-foreground rounded-lg px-4 py-1.5 font-secondary text-[13px] font-semibold hover:bg-primary-hover transition-colors"
+              >
+                <span className="material-icon" style={{ fontSize: 14 }}>check</span>
+                Approve Plan
+              </button>
+              <button
+                onClick={() => setShowFeedback(true)}
+                className="flex items-center gap-1 bg-secondary text-muted rounded-lg px-4 py-1.5 font-secondary text-[13px] font-semibold hover:bg-card transition-colors"
+              >
+                <span className="material-icon" style={{ fontSize: 14 }}>edit</span>
+                Request Changes
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

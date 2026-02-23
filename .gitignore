@@ -7,6 +7,7 @@ dist
 *.db
 *.db-*
 workspaces/
+data/
 app/out/
 .DS_Store
 src/whatsapp-auth

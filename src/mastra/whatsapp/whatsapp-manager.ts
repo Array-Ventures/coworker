@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { DATA_PATH } from '../config/paths';
 import type { Mastra } from '@mastra/core/mastra';
 import { DisconnectReason, type ConnectionState } from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
@@ -14,7 +15,7 @@ import { WhatsAppBridge } from './whatsapp-bridge';
 import { WhatsAppChannel } from './whatsapp-channel';
 import { normalizeWhatsAppId } from './whatsapp-utils';
 import { messageRouter } from '../messaging/router';
-import { pool } from '../db';
+import { whatsappStore } from './whatsapp-store';
 
 export interface WhatsAppState {
   status: WhatsAppConnectionStatus;
@@ -35,24 +36,24 @@ export class WhatsAppManager {
   private reconnectAttempts = 0;
   private stopped = false;
   private connectPromise: Promise<void> | null = null;
-  private authDir = process.env.WHATSAPP_AUTH_DIR || path.resolve('../../whatsapp-auth');
+  private authDir = path.join(DATA_PATH, 'whatsapp-auth');
 
-  // ── Lifecycle ──
+  // -- Lifecycle --
 
   setMastra(mastra: Mastra): void {
     this.mastra = mastra;
   }
 
   async init(): Promise<void> {
-    const enabled = await this.getConfig('enabled');
-    const autoConnect = await this.getConfig('auto_connect');
+    const enabled = this.getConfig('enabled');
+    const autoConnect = this.getConfig('auto_connect');
     if (enabled === 'true' && autoConnect === 'true') {
       console.log('[whatsapp] auto-connecting...');
       await this.connect();
     }
   }
 
-  // ── Connection management ──
+  // -- Connection management --
 
   async connect(): Promise<void> {
     if (this.connectPromise) return this.connectPromise;
@@ -94,6 +95,13 @@ export class WhatsAppManager {
           this.state = { status: 'connected', qrDataUrl: null, connectedPhone: phone };
           console.log(`[whatsapp] connected as ${phone}`);
 
+          // Persist bot LID for mention matching (LID survives restarts via config)
+          const lid = (this.socket?.user as any)?.lid;
+          if (lid) {
+            this.setConfig('bot_lid', lid);
+            console.log(`[whatsapp] saved bot LID: ${lid}`);
+          }
+
           // Register with message router so `msg` CLI can send via whatsapp
           if (this.bridge) {
             messageRouter.register('whatsapp', new WhatsAppChannel(
@@ -102,13 +110,12 @@ export class WhatsAppManager {
                 connected: this.state.status === 'connected',
                 account: this.state.connectedPhone ?? undefined,
               }),
-              pool,
             ));
           }
 
           // Persist enabled state
-          void this.setConfig('enabled', 'true');
-          void this.setConfig('auto_connect', 'true');
+          this.setConfig('enabled', 'true');
+          this.setConfig('auto_connect', 'true');
         }
 
         if (update.connection === 'close') {
@@ -135,7 +142,7 @@ export class WhatsAppManager {
       this.socket = null;
     }
     this.state = { status: 'disconnected', qrDataUrl: null, connectedPhone: null };
-    await this.setConfig('auto_connect', 'false');
+    this.setConfig('auto_connect', 'false');
   }
 
   async logout(): Promise<void> {
@@ -144,101 +151,85 @@ export class WhatsAppManager {
     if (fs.existsSync(this.authDir)) {
       fs.rmSync(this.authDir, { recursive: true, force: true });
     }
-    await this.setConfig('enabled', 'false');
+    this.setConfig('enabled', 'false');
   }
 
   getState(): WhatsAppState {
     return { ...this.state };
   }
 
-  // ── Allowlist CRUD ──
+  // -- Allowlist CRUD --
 
-  async listAllowlist(): Promise<{ phoneNumber: string; rawJid: string | null; label: string | null; createdAt: string }[]> {
-    const result = await pool.query('SELECT * FROM whatsapp_allowlist ORDER BY created_at DESC');
-    return result.rows.map((r: any) => ({
-      phoneNumber: r.phone_number,
-      rawJid: r.raw_jid,
-      label: r.label,
-      createdAt: r.created_at,
-    }));
+  async listAllowlist() {
+    return whatsappStore.listAllowlist();
   }
 
   async addToAllowlist(phoneNumber: string, label?: string): Promise<void> {
     const normalized = normalizeWhatsAppId(phoneNumber);
     if (!normalized) throw new Error('Invalid phone number');
-    await pool.query(
-      `INSERT INTO whatsapp_allowlist (phone_number, label)
-       VALUES ($1, $2)
-       ON CONFLICT(phone_number) DO UPDATE SET label = $3`,
-      [normalized, label ?? null, label ?? null],
-    );
+    whatsappStore.addToAllowlist(normalized, { label: label ?? undefined });
   }
 
   async removeFromAllowlist(phoneNumber: string): Promise<void> {
     const normalized = normalizeWhatsAppId(phoneNumber);
-    await pool.query(
-      'DELETE FROM whatsapp_allowlist WHERE phone_number = $1 OR raw_jid = $2',
-      [normalized, phoneNumber],
-    );
+    whatsappStore.removeFromAllowlist(normalized, phoneNumber);
   }
 
-  // ── Pairing ──
+  // -- Group CRUD --
+
+  async listGroups() {
+    return whatsappStore.listGroups();
+  }
+
+  async addGroup(groupJid: string, groupName?: string, mode?: string): Promise<void> {
+    whatsappStore.addGroup(groupJid, groupName, mode);
+  }
+
+  async updateGroup(groupJid: string, updates: { enabled?: boolean; mode?: string; groupName?: string }): Promise<void> {
+    whatsappStore.updateGroup(groupJid, updates);
+  }
+
+  async removeGroup(groupJid: string): Promise<void> {
+    whatsappStore.removeGroup(groupJid);
+  }
+
+  // -- Pairing --
 
   async approvePairing(code: string): Promise<{ ok: boolean; error?: string }> {
-    const result = await pool.query(
-      'SELECT * FROM whatsapp_pairing WHERE code = $1',
-      [code],
-    );
+    const row = whatsappStore.getPairing(code);
 
-    if (result.rows.length === 0) {
+    if (!row) {
       return { ok: false, error: 'Invalid pairing code' };
     }
 
-    const row = result.rows[0] as any;
-    const expiresAt = new Date(row.expires_at).getTime();
-    if (Date.now() > expiresAt) {
-      await pool.query('DELETE FROM whatsapp_pairing WHERE code = $1', [code]);
+    if (Date.now() > new Date(row.expiresAt).getTime()) {
+      whatsappStore.deletePairing(code);
       return { ok: false, error: 'Pairing code has expired' };
     }
 
-    const rawJid = row.raw_jid as string;
-    const phone = normalizeWhatsAppId(rawJid);
+    const phone = normalizeWhatsAppId(row.rawJid);
 
     // Add to allowlist with raw_jid
-    await pool.query(
-      `INSERT INTO whatsapp_allowlist (phone_number, raw_jid)
-       VALUES ($1, $2)
-       ON CONFLICT(phone_number) DO UPDATE SET raw_jid = $3`,
-      [phone, rawJid, rawJid],
-    );
+    whatsappStore.addToAllowlist(phone, { rawJid: row.rawJid });
 
     // Clean up pairing entry
-    await pool.query('DELETE FROM whatsapp_pairing WHERE code = $1', [code]);
+    whatsappStore.deletePairing(code);
 
-    console.log(`[whatsapp] pairing approved: code=${code} jid=${rawJid} phone=${phone}`);
+    console.log(`[whatsapp] pairing approved: code=${code} jid=${row.rawJid} phone=${phone}`);
     return { ok: true };
   }
 
-  // ── Config helpers ──
+  // -- Config helpers --
 
-  async getConfig(key: string): Promise<string | null> {
-    const result = await pool.query(
-      'SELECT value FROM whatsapp_config WHERE key = $1',
-      [key],
-    );
-    return result.rows.length > 0 ? (result.rows[0].value as string) : null;
+  getConfig(key: string): string | null {
+    return whatsappStore.getConfig(key);
   }
 
-  async setConfig(key: string, value: string): Promise<void> {
-    await pool.query(
-      `INSERT INTO whatsapp_config (key, value, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT(key) DO UPDATE SET value = $3, updated_at = NOW()`,
-      [key, value, value],
-    );
+  setConfig(key: string, value: string): void {
+    whatsappStore.setConfig(key, value);
   }
 
-  // ── Reconnect logic ──
+  // -- Reconnect logic --
 
   private handleDisconnect(update: Partial<ConnectionState>): void {
     messageRouter.unregister('whatsapp');
@@ -253,8 +244,8 @@ export class WhatsAppManager {
       if (fs.existsSync(this.authDir)) {
         fs.rmSync(this.authDir, { recursive: true, force: true });
       }
-      void this.setConfig('auto_connect', 'false');
-      // Immediately reconnect → Baileys sees no creds → emits QR
+      this.setConfig('auto_connect', 'false');
+      // Immediately reconnect -> Baileys sees no creds -> emits QR
       this.state = { status: 'connecting', qrDataUrl: null, connectedPhone: null };
       void this.connect();
       return;
@@ -275,7 +266,7 @@ export class WhatsAppManager {
       return;
     }
 
-    // Exponential backoff with ±25% jitter (matches owpenbot)
+    // Exponential backoff with +/-25% jitter (matches owpenbot)
     const base = Math.min(
       1500 * Math.pow(1.6, Math.max(0, this.reconnectAttempts - 1)),
       30_000,

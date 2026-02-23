@@ -1,7 +1,14 @@
 import { memo, useRef, useCallback, useState } from 'react'
-import { convertFileListToFileUIParts } from 'ai'
+import { convertFilesToStagedFiles } from '../types/harness'
 import { useAppStore } from '../stores/useAppStore'
 import StagedFiles from './StagedFiles'
+import ModeSwitcher from './ModeSwitcher'
+
+const MODE_STYLES: Record<string, { bg: string; label: string }> = {
+  build: { bg: 'bg-primary text-primary-foreground', label: 'Build' },
+  plan: { bg: 'bg-blue-500 text-white', label: 'Plan' },
+  fast: { bg: 'bg-green-500 text-white', label: 'Fast' },
+}
 
 type ChatInputProps = {
   value: string
@@ -12,6 +19,8 @@ type ChatInputProps = {
   isLoading?: boolean
   variant?: 'home' | 'reply'
   placeholder?: string
+  currentModeId?: string
+  onModeSwitch?: (modeId: string) => void
 }
 
 export default memo(function ChatInput({
@@ -23,10 +32,13 @@ export default memo(function ChatInput({
   isLoading = false,
   variant = 'reply',
   placeholder,
+  currentModeId,
+  onModeSwitch,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [showModeSwitcher, setShowModeSwitcher] = useState(false)
 
   const stagedFiles = useAppStore((s) => s.stagedFiles)
   const addFiles = useAppStore((s) => s.addFiles)
@@ -47,7 +59,7 @@ export default memo(function ChatInput({
   const handleFilesSelected = useCallback(
     async (files: FileList | null) => {
       if (!files || files.length === 0) return
-      const parts = await convertFileListToFileUIParts(files)
+      const parts = await convertFilesToStagedFiles(files)
       addFiles(parts)
     },
     [addFiles]
@@ -85,6 +97,8 @@ export default memo(function ChatInput({
 
   const defaultPlaceholder =
     variant === 'home' ? 'What can I do for you?' : 'Reply...'
+
+  const modeStyle = MODE_STYLES[currentModeId || 'build'] || MODE_STYLES.build
 
   return (
     <div
@@ -126,14 +140,35 @@ export default memo(function ChatInput({
 
       {/* Bottom row — h-9 (36px), space-between */}
       <div className="flex items-center justify-between h-9">
-        {/* Left: model icon + bordered label pill */}
-        <div className="flex items-center gap-2">
-          <span
-            className="material-icon text-muted-dim"
-            style={{ fontSize: 20 }}
-          >
-            smart_toy
-          </span>
+        {/* Left: mode pill + separator + model label */}
+        <div className="flex items-center gap-2 relative">
+          {currentModeId && onModeSwitch ? (
+            <>
+              <button
+                onClick={() => setShowModeSwitcher(v => !v)}
+                className={`inline-flex items-center gap-1 rounded-lg font-secondary text-[12px] font-semibold transition-colors ${modeStyle.bg}`}
+                style={{ padding: '4px 8px' }}
+              >
+                {modeStyle.label}
+                <span className="material-icon" style={{ fontSize: 14 }}>keyboard_arrow_down</span>
+              </button>
+              <span className="text-muted-dim text-[12px]">·</span>
+              {showModeSwitcher && (
+                <ModeSwitcher
+                  currentModeId={currentModeId}
+                  onSelect={onModeSwitch}
+                  onClose={() => setShowModeSwitcher(false)}
+                />
+              )}
+            </>
+          ) : (
+            <span
+              className="material-icon text-muted-dim"
+              style={{ fontSize: 20 }}
+            >
+              smart_toy
+            </span>
+          )}
           <span className="inline-flex items-center gap-1 border border-border rounded-lg text-muted-dim font-primary text-xs font-medium"
             style={{ padding: '4px 10px' }}
           >

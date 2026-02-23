@@ -1,3 +1,9 @@
+const HIDDEN_TOOLS = new Set(['task_write', 'task_check'])
+
+export function isHiddenTool(toolName: string): boolean {
+  return HIDDEN_TOOLS.has(toolName)
+}
+
 type ToolMeta = {
   displayName: string
   icon: string
@@ -15,6 +21,7 @@ const WORKSPACE_TOOLS: Record<string, ToolMeta> = {
   mastra_workspace_file_stat: { displayName: 'File Info', icon: 'info', primaryArg: 'path' },
   view_app: { displayName: 'View App', icon: 'web', primaryArg: 'name' },
   searchMemory: { displayName: 'Search Memory', icon: 'neurology', primaryArg: 'query' },
+  view_image: { displayName: 'View Image', icon: 'image', primaryArg: 'path' },
 }
 
 export function getToolDisplay(toolName: string): ToolMeta {
@@ -41,7 +48,9 @@ export function formatToolOutput(
   toolName: string,
   output: unknown,
 ): { type: 'text' | 'pre'; content: string } | null {
-  if (!output || typeof output !== 'object') return null
+  if (!output) return null
+  if (typeof output === 'string') return { type: 'pre', content: output.trim() || '(no output)' }
+  if (typeof output !== 'object') return { type: 'pre', content: String(output) }
   const o = output as Record<string, unknown>
 
   if (toolName === 'mastra_workspace_execute_command') {
@@ -64,6 +73,10 @@ export function formatToolOutput(
 
   if (toolName === 'searchMemory') {
     return null // handled by custom SearchMemoryOutput component
+  }
+
+  if (toolName === 'view_image') {
+    return null // handled by custom image render in ToolInvocation
   }
 
   return { type: 'pre', content: JSON.stringify(o, null, 2) }

@@ -1,163 +1,177 @@
-import { useEffect, useMemo, useCallback, useRef } from 'react'
-import type { FileUIPart } from 'ai'
-import { useChat } from '@ai-sdk/react'
-import { DefaultChatTransport } from 'ai'
-import { useTheme } from './hooks/useTheme'
-import { useAppStore } from './stores/useAppStore'
-import { generateThreadId } from './stores/slices/chatSlice'
-import { AGENT_ID, RESOURCE_ID, MASTRA_BASE_URL, authHeaders } from './mastra-client'
-import Sidebar from './Sidebar'
-import CommandPalette from './components/CommandPalette'
-import HomePage from './pages/HomePage'
-import ChatsListPage from './pages/ChatsListPage'
-import ActiveChatPage from './pages/ActiveChatPage'
-import FilesPage from './pages/FilesPage'
-import SuperpowersPage from './pages/SuperpowersPage'
-import SettingsPage from './pages/SettingsPage'
-import ScheduledTasksPage from './pages/ScheduledTasksPage'
-import AppsPage from './pages/AppsPage'
+import { useEffect, useCallback, useMemo } from "react";
+import { useHarness } from "./hooks/useHarness";
+import { useTheme } from "./hooks/useTheme";
+import { useAppStore } from "./stores/useAppStore";
+import {
+  MASTRA_BASE_URL,
+  authHeaders,
+} from "./mastra-client";
+import Sidebar from "./Sidebar";
+import CommandPalette from "./components/CommandPalette";
+import HomePage from "./pages/HomePage";
+import ChatsListPage from "./pages/ChatsListPage";
+import ActiveChatPage from "./pages/ActiveChatPage";
+import ActivityPage from "./pages/ActivityPage";
+import FilesPage from "./pages/FilesPage";
+import SuperpowersPage from "./pages/SuperpowersPage";
+import SettingsPage from "./pages/SettingsPage";
+import ScheduledTasksPage from "./pages/ScheduledTasksPage";
+import AppsPage from "./pages/AppsPage";
+import type { StagedFile } from "./types/harness";
 
 export default function App() {
-  const theme = useTheme()
+  const theme = useTheme();
+
+  // ── Harness hook (replaces useChat) ──
+  const harness = useHarness();
 
   // ── Store state ──
-  const currentPage = useAppStore((s) => s.currentPage)
-  const showCommandPalette = useAppStore((s) => s.showCommandPalette)
-  const threadId = useAppStore((s) => s.threadId)
-  const pendingLoad = useAppStore((s) => s.pendingLoad)
+  const currentPage = useAppStore((s) => s.currentPage);
+  const showCommandPalette = useAppStore((s) => s.showCommandPalette);
   // ── Store actions ──
-  const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette)
+  const toggleCommandPalette = useAppStore((s) => s.toggleCommandPalette);
 
-  // ── Transport — reads threadId from store via getState() ──
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: `${MASTRA_BASE_URL}/chat/${AGENT_ID}`,
-        headers: () => authHeaders(),
-        prepareSendMessagesRequest({ messages }) {
-          const state = useAppStore.getState()
-          return {
-            body: {
-              messages,
-              memory: { thread: state.threadId, resource: RESOURCE_ID },
-            },
-          }
-        },
-      }),
-    [],
-  )
-
-  // ── On finish: refresh title (propagates to threads list via updateThreadInList) ──
-  const handleFinish = useCallback(() => {
-    useAppStore.getState().refreshThreadTitle()
-  }, [])
-
-  // ── AI SDK chat hook — id prop gives each thread its own Chat instance ──
-  const { messages, sendMessage, setMessages, status, stop, error, clearError, addToolApprovalResponse } =
-    useChat({
-      transport,
-      ...(threadId != null ? { id: threadId } : {}),
-      onFinish: handleFinish,
-    })
-
-  const isLoading = status === 'streaming' || status === 'submitted'
-
-  // ── Deferred send from Home (Chat must be recreated before sending) ──
-  const pendingSendRef = useRef<{ text?: string; files?: FileUIPart[] } | null>(null)
-
+  // ── Initialize harness on mount ──
   useEffect(() => {
-    if (pendingSendRef.current) {
-      const msg = pendingSendRef.current
-      pendingSendRef.current = null
-      sendMessage(msg)
-    }
-  }, [threadId, sendMessage])
+    harness.init().then((session) => {
+      if (session) {
+        useAppStore.setState({
+          threadId: session.currentThreadId,
+        });
+      }
+    }).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // ── Load historical messages after Chat recreation (from openThread) ──
+  // ── Sync thread ID between store and harness ──
+  const storeThreadId = useAppStore((s) => s.threadId);
   useEffect(() => {
-    if (pendingLoad) {
-      setMessages(pendingLoad.messages)
-      useAppStore.setState({ switchingThread: false, pendingLoad: null })
+    if (harness.currentThreadId) {
+      useAppStore.setState({ threadId: harness.currentThreadId });
     }
-  }, [pendingLoad, setMessages])
+  }, [harness.currentThreadId]);
+
+  // When store threadId changes (e.g., user clicks a thread), sync to harness
+  useEffect(() => {
+    if (storeThreadId && storeThreadId !== harness.currentThreadId) {
+      harness.switchThread(storeThreadId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeThreadId]);
 
   // ── Cmd+K ──
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        toggleCommandPalette()
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        toggleCommandPalette();
       }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [toggleCommandPalette])
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleCommandPalette]);
 
-  // ── Send from Home — deferred: store message, generate threadId, useEffect sends after Chat recreation ──
+  const isLoading = harness.status === "streaming";
+
+  // ── Notification count for sidebar badge ──
+  const notificationCount = useMemo(() => {
+    let count = harness.backgroundNotifications.length;
+    harness.activeThreads.forEach((s) => { if (s.running) count++; });
+    return count;
+  }, [harness.backgroundNotifications, harness.activeThreads]);
+
+  // ── Send from Home — create thread + send message ──
   const handleSendFromHome = useCallback(() => {
-    const state = useAppStore.getState()
-    const trimmed = state.input.trim()
-    if (!trimmed && state.stagedFiles.length === 0) return
+    const state = useAppStore.getState();
+    const trimmed = state.input.trim();
+    const files = state.stagedFiles as StagedFile[];
+    if (!trimmed && files.length === 0) return;
 
-    const msg: { text?: string; files?: FileUIPart[] } = {}
-    if (trimmed) msg.text = trimmed
-    if (state.stagedFiles.length > 0) msg.files = state.stagedFiles
+    // Extract base64 images for harness
+    const images = files
+      .filter((f) => f.mediaType.startsWith("image/"))
+      .map((f) => f.url.split(",")[1]) // Extract base64 from data URL
+      .filter(Boolean);
 
-    pendingSendRef.current = msg
     useAppStore.setState({
-      threadId: generateThreadId(),
-      threadTitle: undefined,
-      input: '',
+      input: "",
       stagedFiles: [],
-      currentPage: 'active-chat',
-    })
-  }, [])
+      currentPage: "active-chat",
+    });
 
-  // ── Send in active chat — direct, no Chat recreation needed ──
+    harness
+      .sendMessage(trimmed || "", images.length > 0 ? images : undefined)
+      .catch(console.error);
+  }, [harness]);
+
+  // ── Send in active chat — direct ──
   const handleSendInChat = useCallback(() => {
-    const state = useAppStore.getState()
-    const trimmed = state.input.trim()
-    if ((!trimmed && state.stagedFiles.length === 0) || state.switchingThread) return
+    const state = useAppStore.getState();
+    const trimmed = state.input.trim();
+    const files = state.stagedFiles as StagedFile[];
+    if (!trimmed && files.length === 0) return;
 
-    const msg: { text?: string; files?: FileUIPart[] } = {}
-    if (trimmed) msg.text = trimmed
-    if (state.stagedFiles.length > 0) msg.files = state.stagedFiles
-    sendMessage(msg)
-    useAppStore.setState({ input: '', stagedFiles: [] })
-  }, [sendMessage])
+    const images = files
+      .filter((f) => f.mediaType.startsWith("image/"))
+      .map((f) => f.url.split(",")[1])
+      .filter(Boolean);
+
+    useAppStore.setState({ input: "", stagedFiles: [] });
+
+    harness
+      .sendMessage(trimmed || "", images.length > 0 ? images : undefined)
+      .catch(console.error);
+  }, [harness]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background [background-size:24px_24px] [background-image:radial-gradient(#CBCCC9_1px,transparent_1px)] dark:[background-image:radial-gradient(#333333_1px,transparent_1px)]">
-      <Sidebar />
+      <Sidebar notificationCount={notificationCount} />
 
       <div className="flex flex-col flex-1 min-w-0">
-        {currentPage === 'home' && (
+        {currentPage === "home" && (
           <HomePage onSend={handleSendFromHome} disabled={isLoading} />
         )}
-        {currentPage === 'chats' && <ChatsListPage />}
-        {currentPage === 'active-chat' && (
+        {currentPage === "chats" && <ChatsListPage />}
+        {currentPage === "active-chat" && (
           <ActiveChatPage
-            messages={messages}
-            setMessages={setMessages}
+            messages={harness.displayMessages}
             onSend={handleSendInChat}
-            onStop={stop}
-            error={error}
-            onClearError={clearError}
+            onStop={harness.abort}
+            error={harness.error}
             isLoading={isLoading}
             isDark={theme.isDark}
-            onToolApprovalResponse={addToolApprovalResponse}
+            toolStates={harness.toolStates}
+            subagentStates={harness.subagentStates}
+            pendingQuestion={harness.pendingQuestion}
+            pendingToolApproval={harness.pendingToolApproval}
+            pendingPlanApproval={harness.pendingPlanApproval}
+            tasks={harness.tasks}
+            onResolveToolApproval={harness.resolveToolApproval}
+            onRespondToQuestion={harness.respondToQuestion}
+            onRespondToPlanApproval={harness.respondToPlanApproval}
+            currentModeId={harness.currentModeId}
+            onSwitchMode={harness.switchMode}
           />
         )}
-        {currentPage === 'files' && <FilesPage />}
-        {currentPage === 'superpowers' && <SuperpowersPage />}
-        {currentPage === 'settings' && (
+        {currentPage === "activity" && (
+          <ActivityPage
+            backgroundNotifications={harness.backgroundNotifications}
+            activeThreads={harness.activeThreads}
+            onRespondToQuestion={harness.respondToBackgroundQuestion}
+            onRespondToToolApproval={harness.respondToBackgroundToolApproval}
+            onRespondToPlanApproval={harness.respondToBackgroundPlanApproval}
+          />
+        )}
+        {currentPage === "files" && <FilesPage />}
+        {currentPage === "superpowers" && <SuperpowersPage />}
+        {currentPage === "settings" && (
           <SettingsPage themeMode={theme.mode} onThemeChange={theme.setMode} />
         )}
-        {currentPage === 'scheduled-tasks' && <ScheduledTasksPage />}
-        {currentPage === 'apps' && <AppsPage />}
+        {currentPage === "scheduled-tasks" && <ScheduledTasksPage />}
+        {currentPage === "apps" && <AppsPage />}
       </div>
 
-{showCommandPalette && <CommandPalette />}
+      {showCommandPalette && <CommandPalette />}
     </div>
-  )
+  );
 }

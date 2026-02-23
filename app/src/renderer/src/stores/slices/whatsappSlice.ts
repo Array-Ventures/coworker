@@ -1,6 +1,6 @@
 import type { StateCreator } from 'zustand'
 import type { AppStore } from '../useAppStore'
-import type { WhatsAppStatus, AllowlistEntry } from '../../mastra-client'
+import type { WhatsAppStatus, AllowlistEntry, GroupEntry } from '../../mastra-client'
 import {
   fetchWhatsAppStatus,
   connectWhatsApp,
@@ -10,6 +10,10 @@ import {
   addToWhatsAppAllowlist,
   removeFromWhatsAppAllowlist,
   approveWhatsAppPairing,
+  fetchWhatsAppGroups,
+  addWhatsAppGroup,
+  updateWhatsAppGroup,
+  removeWhatsAppGroup,
 } from '../../mastra-client'
 
 export interface WhatsAppSlice {
@@ -28,6 +32,11 @@ export interface WhatsAppSlice {
   waAddAllowlist: (phone: string, label?: string) => Promise<void>
   waRemoveAllowlist: (phone: string) => Promise<void>
   waPair: (code: string) => Promise<{ ok: boolean; error?: string }>
+  waGroups: GroupEntry[]
+  loadWaGroups: () => Promise<void>
+  waAddGroup: (groupJid: string, groupName?: string, mode?: string) => Promise<void>
+  waUpdateGroup: (groupJid: string, updates: { enabled?: boolean; mode?: string; groupName?: string }) => Promise<void>
+  waRemoveGroup: (groupJid: string) => Promise<void>
 }
 
 let _loadWa: Promise<void> | null = null
@@ -121,5 +130,34 @@ export const createWhatsAppSlice: StateCreator<AppStore, [], [], WhatsAppSlice> 
       set({ waAllowlist: result.items })
     }
     return { ok: result.ok, error: result.error }
+  },
+
+  waGroups: [],
+
+  loadWaGroups: async () => {
+    try {
+      const groups = await fetchWhatsAppGroups()
+      set({ waGroups: groups })
+    } catch {
+      // ignore
+    }
+  },
+
+  waAddGroup: async (groupJid, groupName, mode) => {
+    await addWhatsAppGroup(groupJid, groupName, mode)
+    const groups = await fetchWhatsAppGroups()
+    set({ waGroups: groups })
+  },
+
+  waUpdateGroup: async (groupJid, updates) => {
+    await updateWhatsAppGroup(groupJid, updates)
+    const groups = await fetchWhatsAppGroups()
+    set({ waGroups: groups })
+  },
+
+  waRemoveGroup: async (groupJid) => {
+    await removeWhatsAppGroup(groupJid)
+    const groups = await fetchWhatsAppGroups()
+    set({ waGroups: groups })
   },
 })

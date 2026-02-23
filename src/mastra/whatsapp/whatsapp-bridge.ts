@@ -5,6 +5,9 @@ import { LocalFilesystem } from '@mastra/core/workspace';
 import { isJidGroup, type WAMessage } from '@whiskeysockets/baileys';
 import type { WhatsAppSocket } from './whatsapp-session';
 import type { SendOpts } from '../messaging/router';
+import { harnessPool } from '../harness/pool';
+import { harnessStorage } from '../harness';
+import { sendAndCapture, sendAndCaptureInteractive } from '../harness/utils';
 import {
   normalizeWhatsAppId,
   extractText,
@@ -20,12 +23,14 @@ import {
   formatMessageEnvelope,
   containsNoReply,
   stripDirectives,
+  wrapObserveMode,
+  type GroupMode,
   type MessageMetadata,
   type MediaAttachment,
 } from './whatsapp-utils';
-import { pool as defaultPool } from '../db';
+import { WhatsAppStore, whatsappStore as defaultStore } from './whatsapp-store';
 
-// Default extensions by media type — used when Baileys doesn't provide a fileName
+// Default extensions by media type -- used when Baileys doesn't provide a fileName
 const TYPE_EXT: Record<string, string> = {
   image: 'jpg', video: 'mp4', audio: 'ogg', document: 'bin', sticker: 'webp',
 };
@@ -47,13 +52,13 @@ interface GroupMeta {
 export class WhatsAppBridge {
   private mastra: Mastra;
   private socket: WhatsAppSocket;
-  private pool: { query: (sql: string, params?: unknown[]) => Promise<any> };
+  private store: WhatsAppStore;
   private sentTracker = new SentMessageTracker();
   private handler: ((arg: { messages: WAMessage[] }) => Promise<void>) | null = null;
 
   // Debounce + abort state (replaces old messageQueue)
   private debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private pendingTexts = new Map<string, { phone: string; texts: string[]; media: MediaAttachment[]; replyJid: string }>();
+  private pendingTexts = new Map<string, { phone: string; texts: string[]; media: MediaAttachment[]; replyJid: string; observeOnly?: boolean }>();
   private activeAbort = new Map<string, AbortController>();
   private processing = new Set<string>();
 
@@ -66,10 +71,19 @@ export class WhatsAppBridge {
   // Per-message metadata for envelope building (keyed by debounce key)
   private pendingMeta = new Map<string, MessageMetadata>();
 
-  constructor(mastra: Mastra, socket: WhatsAppSocket, pool?: any) {
+  // Conversation key → pool threadId (so we can find existing harnesses)
+  private threadMap = new Map<string, string>();
+
+  // Per-key lock to prevent duplicate thread creation from concurrent messages
+  private threadLocks = new Map<string, Promise<any>>();
+
+  // Pending interactive answers: threadKey → resolver (for ask_user/plan_approval forwarded to WhatsApp)
+  private pendingAnswers = new Map<string, { resolve: (text: string) => void; timer: ReturnType<typeof setTimeout> }>();
+
+  constructor(mastra: Mastra, socket: WhatsAppSocket, store?: WhatsAppStore) {
     this.mastra = mastra;
     this.socket = socket;
-    this.pool = pool ?? defaultPool;
+    this.store = store ?? defaultStore;
   }
 
   /** Attach to the Baileys socket's message events. */
@@ -102,6 +116,11 @@ export class WhatsAppBridge {
     this.pendingTexts.clear();
     this.pendingMeta.clear();
     this.processing.clear();
+    this.threadMap.clear();
+    this.threadLocks.clear();
+    // Clear pending interactive answers
+    for (const { timer } of this.pendingAnswers.values()) clearTimeout(timer);
+    this.pendingAnswers.clear();
   }
 
   /** Send a message outbound (for message router). */
@@ -170,19 +189,41 @@ export class WhatsAppBridge {
 
     const isGroup = isJidGroup(remoteJid);
 
+    // Check if this is a reply to a pending interactive question (ask_user / plan_approval)
+    const pendingThreadKey = isGroup
+      ? `whatsapp-group-${remoteJid}`
+      : `whatsapp-${normalizeWhatsAppId(remoteJid)}`;
+    if (this.pendingAnswers.has(pendingThreadKey)) {
+      const { resolve, timer } = this.pendingAnswers.get(pendingThreadKey)!;
+      clearTimeout(timer);
+      this.pendingAnswers.delete(pendingThreadKey);
+      resolve(displayText);
+      return; // Don't process as new message — this is an answer
+    }
+
     if (isGroup) {
       // Group message flow
-      const groupAllowed = await this.isGroupAllowed(remoteJid);
-      if (!groupAllowed) return; // silently ignore
+      const groupConfig = await this.getGroupConfig(remoteJid);
+      if (!groupConfig.allowed) {
+        console.log(`[whatsapp-bridge] group not configured — ignoring message from ${remoteJid} (add via Settings > WhatsApp > Groups)`);
+        return;
+      }
 
       const participant = msg.key.participant as string | undefined;
       if (!participant) return;
 
       const phone = normalizeWhatsAppId(participant);
       const debounceKey = `${remoteJid}:${participant}`;
-      const mentioned = isBotMentioned(msg, (this.socket as any).user?.id ?? '');
+      const botUser = (this.socket as any).user;
+      const botLid = botUser?.lid || await this.store.getConfig('bot_lid') || undefined;
+      const mentioned = isBotMentioned(msg, botUser?.id ?? '', botLid);
       const quotedText = getQuotedText(msg);
       const groupMeta = await this.getGroupMeta(remoteJid);
+
+      // Determine whether to respond based on group mode
+      const shouldRespond = groupConfig.mode === 'all'
+        || (groupConfig.mode === 'mentions' && mentioned);
+      const observeOnly = !shouldRespond;
 
       const meta: MessageMetadata = {
         channel: 'whatsapp',
@@ -199,9 +240,9 @@ export class WhatsAppBridge {
         media: media || undefined,
       };
 
-      console.log(`[whatsapp-bridge] group msg from ${phone} in ${groupMeta.name} (mentioned=${mentioned}${media ? `, media=${media.type}` : ''})`);
+      console.log(`[whatsapp-bridge] group msg from ${phone} in ${groupMeta.name} (mode=${groupConfig.mode}, mentioned=${mentioned}, observe=${observeOnly}${media ? `, media=${media.type}` : ''})`);
 
-      this.bufferMessage(debounceKey, phone, displayText, remoteJid, meta, mentioned, media || undefined);
+      this.bufferMessage(debounceKey, phone, displayText, remoteJid, meta, mentioned, media || undefined, observeOnly);
     } else {
       // DM flow
       const phone = normalizeWhatsAppId(remoteJid);
@@ -209,11 +250,15 @@ export class WhatsAppBridge {
 
       const allowed = await this.isAllowed(remoteJid, phone);
       if (!allowed) {
-        console.log(`[whatsapp-bridge] not in allowlist — initiating pairing for ${remoteJid}`);
-        try {
-          await this.sendPairingCode(remoteJid);
-        } catch (err) {
-          console.error('[whatsapp-bridge] sendPairingCode failed:', err);
+        if (displayText.trim().toLowerCase() === '/pair') {
+          console.log(`[whatsapp-bridge] /pair command from ${phone} — sending pairing code`);
+          try {
+            await this.sendPairingCode(remoteJid);
+          } catch (err) {
+            console.error('[whatsapp-bridge] sendPairingCode failed:', err);
+          }
+        } else {
+          console.log(`[whatsapp-bridge] not in allowlist — ignoring ${phone} (send /pair to connect)`);
         }
         return;
       }
@@ -246,11 +291,15 @@ export class WhatsAppBridge {
     meta: MessageMetadata,
     immediateFlush: boolean,
     media?: MediaAttachment,
+    observeOnly?: boolean,
   ): void {
     // Accumulate text and media
     const pending = this.pendingTexts.get(debounceKey) ?? { phone, texts: [], media: [], replyJid };
     if (text) pending.texts.push(text);
     if (media) pending.media.push(media);
+    // observeOnly: false (respond) wins over true (observe) when messages merge
+    if (observeOnly === false) pending.observeOnly = false;
+    else if (pending.observeOnly === undefined) pending.observeOnly = observeOnly;
     this.pendingTexts.set(debounceKey, pending);
 
     // Store latest metadata (last message wins for envelope)
@@ -289,7 +338,7 @@ export class WhatsAppBridge {
     const pending = this.pendingTexts.get(debounceKey);
     if (!pending || (!pending.texts.length && !pending.media.length)) return;
 
-    const { phone, texts, media, replyJid } = pending;
+    const { phone, texts, media, replyJid, observeOnly } = pending;
     const meta = this.pendingMeta.get(debounceKey);
     this.pendingTexts.delete(debounceKey);
     this.pendingMeta.delete(debounceKey);
@@ -302,7 +351,7 @@ export class WhatsAppBridge {
     this.activeAbort.set(debounceKey, controller);
 
     try {
-      await this.processMessage(phone, replyJid, combined, meta, controller, media);
+      await this.processMessage(phone, replyJid, combined, meta, controller, media, observeOnly);
     } catch (err) {
       console.error(`[whatsapp-bridge] task failed for ${debounceKey}:`, err);
     } finally {
@@ -319,27 +368,17 @@ export class WhatsAppBridge {
 
   private async sendPairingCode(remoteJid: string): Promise<void> {
     // Check if there's already a pending pairing for this JID
-    const existing = await this.pool.query(
-      'SELECT code FROM whatsapp_pairing WHERE raw_jid = $1 AND expires_at > NOW()',
-      [remoteJid],
-    );
+    const existing = this.store.findActivePairing(remoteJid);
 
     let code: string;
-    if (existing.rows.length > 0) {
-      code = existing.rows[0].code as string;
+    if (existing) {
+      code = existing.code;
     } else {
       // Clean up any expired entries for this JID
-      await this.pool.query(
-        'DELETE FROM whatsapp_pairing WHERE raw_jid = $1',
-        [remoteJid],
-      );
+      this.store.cleanExpiredPairings(remoteJid);
 
       code = generatePairingCode();
-      const expiresAt = new Date(Date.now() + PAIRING_TTL_MS).toISOString();
-      await this.pool.query(
-        'INSERT INTO whatsapp_pairing (code, raw_jid, expires_at) VALUES ($1, $2, $3)',
-        [code, remoteJid, expiresAt],
-      );
+      this.store.createPairing(code, remoteJid, new Date(Date.now() + PAIRING_TTL_MS));
     }
 
     console.log(`[whatsapp-bridge] sent pairing code ${code} for JID ${remoteJid}`);
@@ -349,6 +388,96 @@ export class WhatsAppBridge {
     this.sentTracker.record(sent?.key?.id);
   }
 
+  /**
+   * Get or create a harness instance for a given conversation key.
+   * Uses a per-key lock to prevent duplicate thread creation from concurrent messages.
+   */
+  private async getOrCreateHarness(key: string, title: string) {
+    const pending = this.threadLocks.get(key);
+    if (pending) {
+      await pending;
+      return this.getOrCreateHarness(key, title);
+    }
+    const promise = this._getOrCreateHarness(key, title);
+    this.threadLocks.set(key, promise);
+    try {
+      return await promise;
+    } finally {
+      this.threadLocks.delete(key);
+    }
+  }
+
+  private async _getOrCreateHarness(key: string, title: string) {
+    // Fast path: check in-memory map (works within a single server lifetime)
+    const cachedThreadId = this.threadMap.get(key);
+    if (cachedThreadId) {
+      const entry = harnessPool.get(cachedThreadId);
+      if (entry) {
+        harnessPool.touch(cachedThreadId);
+        return entry.harness;
+      }
+      // Pool swept the entry — remove stale mapping
+      this.threadMap.delete(key);
+    }
+
+    // Slow path: query Postgres for an existing thread with this conversation key
+    const existingThreadId = await this.findThreadByConversationKey(key);
+    if (existingThreadId) {
+      const entry = await harnessPool.getOrCreate(existingThreadId, 'whatsapp');
+      this.threadMap.set(key, existingThreadId);
+      return entry.harness;
+    }
+
+    // No existing thread — create a new one
+    const { threadId, entry } = await harnessPool.createThread(title, 'whatsapp');
+    this.threadMap.set(key, threadId);
+    await entry.harness.setThreadSetting({ key: 'channel', value: 'whatsapp' });
+    await entry.harness.setThreadSetting({ key: 'waConversationKey', value: key });
+    return entry.harness;
+  }
+
+  /** Query the memory store directly for a thread with matching waConversationKey metadata.
+   *  We bypass Harness.listThreads() because it strips the metadata filter (framework bug).
+   *  PostgresStore itself has no listThreads — it's on the memory store via getStore('memory'). */
+  private async findThreadByConversationKey(key: string): Promise<string | null> {
+    try {
+      const memoryStore = await harnessStorage.getStore('memory');
+      if (!memoryStore) return null;
+      const result = await memoryStore.listThreads({
+        filter: {
+          resourceId: 'coworker',
+          metadata: { waConversationKey: key },
+        },
+        perPage: 1,
+        orderBy: { field: 'updatedAt', direction: 'desc' },
+      });
+      const threads = (result as any)?.threads ?? [];
+      if (threads.length > 0) {
+        return threads[0].id;
+      }
+      return null;
+    } catch (err) {
+      console.warn('[whatsapp-bridge] thread lookup failed, will create new:', err);
+      return null;
+    }
+  }
+
+  /** Park a Promise waiting for the user's next WhatsApp reply on this thread.
+   *  Resolves when handleMessage() intercepts the reply; rejects on timeout. */
+  private waitForReply(threadKey: string, timeoutMs = 120_000): Promise<string> {
+    // Cancel any existing pending answer for this thread
+    const existing = this.pendingAnswers.get(threadKey);
+    if (existing) { clearTimeout(existing.timer); }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingAnswers.delete(threadKey);
+        reject(new Error('Reply timeout'));
+      }, timeoutMs);
+      this.pendingAnswers.set(threadKey, { resolve, timer });
+    });
+  }
+
   private async processMessage(
     phone: string,
     replyJid: string,
@@ -356,18 +485,12 @@ export class WhatsAppBridge {
     meta?: MessageMetadata,
     controller?: AbortController,
     mediaItems?: MediaAttachment[],
+    observeOnly?: boolean,
   ): Promise<void> {
-    const agent = this.mastra.getAgent('coworkerAgent');
-    if (!agent) {
-      console.error('[whatsapp-bridge] coworkerAgent not found');
-      return;
-    }
-
     const isGroup = meta?.type === 'group';
-    const threadId = isGroup
+    const threadKey = isGroup
       ? `whatsapp-group-${meta!.groupJid}`
       : `whatsapp-${phone}`;
-    const resourceId = 'coworker';
 
     // Build envelope
     let envelopeText = text;
@@ -387,7 +510,7 @@ export class WhatsAppBridge {
           content += '\n[Voice message received — transcription not yet available]';
           continue;
         }
-        const savedPath = await this.saveMediaToWorkspace(attachment, threadId);
+        const savedPath = await this.saveMediaToWorkspace(attachment, threadKey);
         if (savedPath) {
           const parts = [attachment.type, attachment.mimeType];
           if (attachment.fileName) parts.push(attachment.fileName);
@@ -399,46 +522,104 @@ export class WhatsAppBridge {
       }
     }
 
-    // Thread metadata
+    // Wrap content with observe envelope when in observe-only mode
+    if (observeOnly && isGroup && meta?.groupJid) {
+      content = wrapObserveMode(content, meta.groupJid);
+    }
+
     const threadTitle = isGroup
       ? `WhatsApp Group: ${meta!.groupName}`
       : `WhatsApp: ${phone}`;
-    const threadMetadata = isGroup
-      ? { type: 'whatsapp-group', groupJid: meta!.groupJid, groupName: meta!.groupName }
-      : { type: 'whatsapp', phone };
 
-    // Use provided controller or create one (backward compat)
+    // Get or create a harness for this conversation
+    const harness = await this.getOrCreateHarness(threadKey, threadTitle);
+
+    // Use provided controller for abort signalling (debounce + timeout)
     if (!controller) controller = new AbortController();
     const timeout = setTimeout(() => {
       console.warn(`[whatsapp-bridge] agent timed out for ${phone} after ${AGENT_TIMEOUT_MS / 1000}s`);
+      harness.abort();
       controller.abort();
     }, AGENT_TIMEOUT_MS);
 
+    // Wire external abort (debounce cancellation) to harness abort
+    controller.signal.addEventListener('abort', () => harness.abort(), { once: true });
+
+    // Also clear any pending answer when aborted (prevents leaked promises)
+    controller.signal.addEventListener('abort', () => {
+      const pending = this.pendingAnswers.get(threadKey);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this.pendingAnswers.delete(threadKey);
+      }
+    }, { once: true });
+
     try {
-      // Show typing indicator (fire-and-forget — NEVER await)
-      this.socket.sendPresenceUpdate('composing', replyJid).catch(() => {});
+      // Show typing indicator only when we'll actually respond
+      if (!observeOnly) {
+        this.socket.sendPresenceUpdate('composing', replyJid).catch(() => {});
+      }
 
-      console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."${hasMedia ? ` (+ ${mediaItems.length} media)` : ''}`);
+      console.log(`[whatsapp-bridge] processing message from ${phone}: "${text.slice(0, 80)}..."${hasMedia ? ` (+ ${mediaItems.length} media)` : ''}${observeOnly ? ' [observe]' : ''}`);
 
-      const response = await agent.generate(
-        [{ role: 'user' as const, content }],
-        {
-          abortSignal: controller.signal,
-          memory: {
-            thread: {
-              id: threadId,
-              title: threadTitle,
-              metadata: threadMetadata,
+      // Use interactive capture for non-observe runs to handle ask_user, tool_approval, plan_approval
+      // Look up pool threadId for clearing pending states (keeps Electron UI in sync)
+      const poolThreadId = this.threadMap.get(threadKey);
+
+      const replyText = observeOnly
+        ? await sendAndCapture(harness, content)
+        : await sendAndCaptureInteractive(harness, content, {
+            onQuestion: async ({ question, options }) => {
+              let msg = question;
+              if (options?.length) {
+                msg += '\n\n' + options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n');
+                msg += '\n\n_Reply with a number or type your answer._';
+              }
+              const sent = await this.socket.sendMessage(replyJid, { text: msg });
+              this.sentTracker.record(sent?.key?.id);
+              const reply = await this.waitForReply(threadKey, 120_000);
+              // Clear pool pending state so Electron UI dismisses the card
+              if (poolThreadId) harnessPool.clearQuestion(poolThreadId);
+              // Resolve numbered option → label
+              if (options?.length) {
+                const num = parseInt(reply.trim(), 10);
+                if (num >= 1 && num <= options.length) return options[num - 1].label;
+              }
+              return reply;
             },
-            resource: resourceId,
-          },
-        },
-      );
+            onPlanApproval: async ({ planId, title, plan }) => {
+              const sent = await this.socket.sendMessage(replyJid, { text: `Plan: ${title}\n\nApprove? Reply *yes* or *no*.` });
+              this.sentTracker.record(sent?.key?.id);
+              let response: { action: 'approved' | 'rejected'; feedback?: string } = { action: 'approved' };
+              try {
+                const reply = await this.waitForReply(threadKey, 120_000);
+                const lower = reply.trim().toLowerCase();
+                if (lower === 'no' || lower === 'n' || lower === 'reject') {
+                  response = { action: 'rejected', feedback: reply };
+                }
+              } catch { /* timeout → auto-approve */ }
+              // Mirror Electron REST route: store activePlan before respondToPlanApproval
+              if (response.action === 'approved') {
+                await harness.setState({
+                  activePlan: { title, plan, approvedAt: new Date().toISOString() },
+                } as any);
+              }
+              // Clear pool pending state so Electron UI dismisses the card
+              if (poolThreadId) harnessPool.clearPlanApproval(poolThreadId);
+              return response;
+            },
+          });
 
       // If aborted (new message arrived), skip sending reply
       if (controller.signal.aborted) return;
 
-      const reply = response.text?.trim();
+      // Observe mode: agent processed for memory, suppress response delivery
+      if (observeOnly) {
+        console.log(`[whatsapp-bridge] observe mode — processed for memory, response suppressed`);
+        return;
+      }
+
+      const reply = replyText?.trim();
       if (!reply) return;
 
       // Check <no-reply/> directive
@@ -466,17 +647,18 @@ export class WhatsAppBridge {
       throw err;
     } finally {
       clearTimeout(timeout);
-      // Clear typing indicator (fire-and-forget — NEVER await)
-      this.socket.sendPresenceUpdate('paused', replyJid).catch(() => {});
+      // Clear typing indicator only if we set it
+      if (!observeOnly) {
+        this.socket.sendPresenceUpdate('paused', replyJid).catch(() => {});
+      }
     }
   }
 
   /** Get or create the workspace filesystem for saving media. */
   private async getWorkspaceFs(): Promise<LocalFilesystem> {
     if (!this.workspaceFs) {
-      const base = process.env.WORKSPACE_PATH || path.resolve('./workspaces');
-      const agentId = process.env.AGENT_ID || 'coworker';
-      this.workspaceFs = new LocalFilesystem({ basePath: path.join(base, agentId) });
+      const { WORKSPACE_PATH } = await import('../config/paths');
+      this.workspaceFs = new LocalFilesystem({ basePath: WORKSPACE_PATH });
       await this.workspaceFs.init();
     }
     return this.workspaceFs;
@@ -501,7 +683,7 @@ export class WhatsAppBridge {
       const fs = await this.getWorkspaceFs();
       await fs.writeFile(filePath, buffer, { recursive: true });
 
-      return `/workspace/${filePath}`;
+      return `/${filePath}`;
     } catch (err) {
       console.warn(`[whatsapp-bridge] media save failed: ${err}`);
       return null;
@@ -511,27 +693,19 @@ export class WhatsAppBridge {
   /** Check allowlist by raw JID or normalized phone number. */
   private async isAllowed(rawJid: string, phone: string): Promise<boolean> {
     try {
-      const result = await this.pool.query(
-        'SELECT phone_number FROM whatsapp_allowlist WHERE raw_jid = $1 OR phone_number = $2',
-        [rawJid, phone],
-      );
-      return result.rows.length > 0;
+      return this.store.isAllowed(rawJid, phone);
     } catch (err) {
       console.error('[whatsapp-bridge] allowlist check failed:', err);
-      return false; // fail-closed: reject if DB is down
+      return false; // fail-closed: reject on error
     }
   }
 
-  /** Check if a group is in the allowlist. */
-  private async isGroupAllowed(groupJid: string): Promise<boolean> {
+  /** Get group config: whether allowed and what mode. */
+  private async getGroupConfig(groupJid: string): Promise<{ allowed: boolean; mode: GroupMode }> {
     try {
-      const result = await this.pool.query(
-        'SELECT group_jid FROM whatsapp_groups WHERE group_jid = $1 AND enabled = true',
-        [groupJid],
-      );
-      return result.rows.length > 0;
+      return this.store.getGroupConfig(groupJid);
     } catch {
-      return false;
+      return { allowed: false, mode: 'mentions' as GroupMode };
     }
   }
 
