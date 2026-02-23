@@ -25,11 +25,11 @@ export const mastra = new Mastra({
   server: {
     bodySizeLimit: 52_428_800, // 50 MB — needed for uploading large files (PPT, DOCX, etc.)
     middleware: [
-      cors({ origin: '*' }),
-      createAuthMiddleware(),
-      logger(),
-      timing(),
-      compress(),
+      { handler: cors({ origin: '*' }), path: '/*' },
+      { handler: createAuthMiddleware(), path: '/*' },
+      { handler: logger(), path: '/*' },
+      { handler: timing(), path: '/*' },
+      { handler: compress(), path: '/*' },
     ],
     apiRoutes: createRoutes({ taskManager, whatsAppManager, agentConfig }),
   },
