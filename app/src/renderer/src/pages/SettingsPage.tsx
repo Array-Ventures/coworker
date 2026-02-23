@@ -2223,14 +2223,14 @@ import AdvancedEnvVars from '../components/settings/AdvancedEnvVars'
 import AdvancedUpdates from '../components/settings/AdvancedUpdates'
 
 const advSubTabs = [
-  { label: 'Instructions', icon: 'description' },
   { label: 'Server', icon: 'dns' },
+  { label: 'Instructions', icon: 'description' },
   { label: 'Environment', icon: 'key' },
   { label: 'Updates', icon: 'update' },
 ]
 
 function AdvancedContent() {
-  const [subTab, setSubTab] = useState('Instructions')
+  const [subTab, setSubTab] = useState('Server')
   return (
     <div className="flex flex-col" style={{ gap: 20 }}>
       <FilterTabs tabs={advSubTabs} activeTab={subTab} onTabChange={setSubTab} />
