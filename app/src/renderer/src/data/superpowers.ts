@@ -55,7 +55,7 @@ export const SUPERPOWERS: SuperpowerDef[] = [
       runtimes: [{
         label: 'agent-browser CLI + Chromium',
         install: 'npm install --save agent-browser && ln -sf $PWD/node_modules/.bin/agent-browser $HOME/.bin/agent-browser && agent-browser install --with-deps',
-        check: 'agent-browser --version',
+        check: 'which agent-browser',
       }],
       envVars: {
         AGENT_BROWSER_STREAM_PORT: {

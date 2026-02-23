@@ -1,6 +1,7 @@
 import { readJsonConfig, writeJsonConfig, readTextConfig, writeTextConfig, deleteConfig } from './fs-config';
 import { getMcpServers, setMcpServers, getMcpToolsets, disconnectMcp } from '../mcp';
 import type { McpServerConfig } from '../mcp';
+import { WORKSPACE_PATH } from './paths';
 
 export type { McpServerConfig };
 
@@ -83,7 +84,14 @@ export class AgentConfigManager {
 
   getSandboxEnv(): Record<string, string> {
     const config = readJsonConfig<ConfigJson>('config.json', {});
-    return config.sandboxEnv ?? {};
+    const env = config.sandboxEnv ?? {};
+    // Expand ~/ to WORKSPACE_PATH — tilde is NOT expanded in child process env vars
+    for (const [key, value] of Object.entries(env)) {
+      if (typeof value === 'string' && value.startsWith('~/')) {
+        env[key] = WORKSPACE_PATH + value.slice(1);
+      }
+    }
+    return env;
   }
 
   getConfig() {

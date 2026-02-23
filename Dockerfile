@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Node.js 22 LTS via NodeSource
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \
+    # Playwright system deps for Chromium (agent-browser install downloads binaries at runtime)
+    npx playwright install-deps chromium && \
     # gh CLI via official apt repo
     mkdir -p -m 755 /etc/apt/keyrings && \
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
