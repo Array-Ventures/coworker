@@ -55,6 +55,17 @@ function connectUpstream(client: StreamClient) {
     const raw = typeof e.data === 'string' ? e.data : '';
     console.log(`[browser-stream] upstream msg: ${raw.slice(0, 200)}`);
     send(client, 'frame', raw);
+
+    // agent-browser's StreamServer only starts screencasting for the FIRST
+    // client that connects after the browser is launched. If we connected
+    // before the browser launched, we're stuck with screencasting:false.
+    // Force a reconnect so we re-trigger the "first client" path.
+    try {
+      const msg = JSON.parse(raw);
+      if (msg.type === 'error' && msg.message === 'Browser not launched') {
+        ws.close();
+      }
+    } catch {}
   };
 
   ws.onclose = () => {
