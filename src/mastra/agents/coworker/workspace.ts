@@ -52,10 +52,14 @@ export const skillPaths = collectSkillPaths();
 export function syncSkillsBin(): number {
   const binDir = path.join(WORKSPACE_PATH, '.bin');
   fs.mkdirSync(binDir, { recursive: true });
-  // Remove old symlinks
+  // Remove old SKILL symlinks only (preserve non-skill symlinks like agent-browser)
   for (const f of fs.readdirSync(binDir)) {
     const p = path.join(binDir, f);
-    try { if (fs.lstatSync(p).isSymbolicLink()) fs.unlinkSync(p); } catch {}
+    try {
+      if (!fs.lstatSync(p).isSymbolicLink()) continue;
+      const target = fs.readlinkSync(p);
+      if (skillPaths.some(sp => target.startsWith(sp))) fs.unlinkSync(p);
+    } catch {}
   }
   // Create fresh symlinks from all skill directories
   let linked = 0;
