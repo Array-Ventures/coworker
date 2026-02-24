@@ -7,6 +7,23 @@ import { AppRenderer } from '@mcp-ui/client'
 
 const sandboxConfig = { url: new URL('./sandbox_proxy.html', window.location.href) }
 
+const isExecCommand = (name: string) => name === 'mastra_workspace_execute_command'
+
+function getCommandStr(args: unknown): string {
+  if (!args || typeof args !== 'object') return ''
+  return ((args as Record<string, unknown>).command as string) || ''
+}
+
+function CommandLine({ command }: { command: string }) {
+  if (!command) return null
+  return (
+    <div className="flex gap-1.5 px-3 pb-2 items-baseline">
+      <span className="font-primary text-[12px] font-semibold text-muted-foreground shrink-0">$</span>
+      <span className="font-primary text-[12px] text-foreground break-all">{command}</span>
+    </div>
+  )
+}
+
 function ToolArgPill({ value }: { value: string }) {
   return (
     <span className="bg-secondary rounded px-1.5 py-0.5 font-primary text-[11px] text-foreground">
@@ -23,6 +40,7 @@ function ToolHeader({
   duration,
   chevron,
   onToggle,
+  hidePrimaryArg,
 }: {
   toolName: string
   args: unknown
@@ -31,9 +49,10 @@ function ToolHeader({
   duration?: number | null
   chevron?: 'up' | 'down'
   onToggle?: () => void
+  hidePrimaryArg?: boolean
 }) {
   const display = getToolDisplay(toolName)
-  const argValue = getPrimaryArgValue(toolName, args)
+  const argValue = hidePrimaryArg ? null : getPrimaryArgValue(toolName, args)
 
   const content = (
     <>
@@ -127,6 +146,7 @@ export function ToolInvocation({
 
   // Running state
   if (status === 'running') {
+    const isExec = isExecCommand(toolName)
     return (
       <div className="bg-card border border-border rounded-lg mt-2 overflow-hidden">
         <ToolHeader
@@ -134,7 +154,9 @@ export function ToolInvocation({
           args={args}
           statusIcon="progress_activity"
           statusIconClass="text-primary animate-spin"
+          hidePrimaryArg={isExec}
         />
+        {isExec && <CommandLine command={getCommandStr(args)} />}
         {shellOutput && (
           <>
             <div className="h-px w-full bg-border" />
@@ -149,6 +171,7 @@ export function ToolInvocation({
 
   // Approval required
   if (status === 'approval_required') {
+    const isExec = isExecCommand(toolName)
     return (
       <div className="bg-card border border-primary rounded-lg mt-2 overflow-hidden">
         <ToolHeader
@@ -156,7 +179,9 @@ export function ToolInvocation({
           args={args}
           statusIcon="verified_user"
           statusIconClass="text-primary"
+          hidePrimaryArg={isExec}
         />
+        {isExec && <CommandLine command={getCommandStr(args)} />}
         <div className="h-px w-full bg-primary/20" />
         <div className="flex items-center gap-2 p-3">
           <button
@@ -212,6 +237,7 @@ export function ToolInvocation({
 
   // Error state
   if (status === 'error') {
+    const isExec = isExecCommand(toolName)
     const errorText = typeof result === 'string' ? result : JSON.stringify(result, null, 2)
     return (
       <div className="bg-card border border-error rounded-lg mt-2 overflow-hidden">
@@ -220,7 +246,9 @@ export function ToolInvocation({
           args={args}
           statusIcon="error"
           statusIconClass="text-error"
+          hidePrimaryArg={isExec}
         />
+        {isExec && <CommandLine command={getCommandStr(args)} />}
         <div className="h-px w-full bg-error/20" />
         <div className="px-2 pb-2">
           <pre className="bg-error-bg rounded-md p-3 font-primary text-[11px] text-error/80 whitespace-pre-wrap break-all max-h-[100px] overflow-y-auto">
@@ -270,6 +298,35 @@ export function ToolInvocation({
           onToggle={() => setExpanded(!expanded)}
         />
         {expanded && <ScheduledTasksOutput action={action} output={result} />}
+      </div>
+    )
+  }
+
+  // execute_command — show command prominently, output in dropdown
+  if (isExecCommand(toolName)) {
+    const command = getCommandStr(args)
+    const formatted = formatToolOutput(toolName, result)
+    return (
+      <div className="bg-card border border-border rounded-lg mt-2 overflow-hidden">
+        <ToolHeader
+          toolName={toolName}
+          args={args}
+          statusIcon="check_circle"
+          statusIconClass="text-success"
+          duration={duration}
+          chevron={expanded ? 'up' : 'down'}
+          onToggle={() => setExpanded(!expanded)}
+          hidePrimaryArg
+        />
+        <CommandLine command={command} />
+        {expanded && formatted && (
+          <>
+            <div className="h-px w-full bg-border" />
+            <pre className="bg-background p-3 font-primary text-[11px] text-muted leading-relaxed whitespace-pre-wrap overflow-x-auto max-h-[300px] overflow-y-auto">
+              {formatted.content}
+            </pre>
+          </>
+        )}
       </div>
     )
   }

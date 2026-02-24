@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import type { HarnessMessage, TaskItem } from '../types/harness'
 import type { ToolState, SubagentState } from '../types/harness'
 import { useAppStore } from '../stores/useAppStore'
@@ -9,7 +9,6 @@ import NewChatButton from '../components/NewChatButton'
 import ThreadSwitcher from '../components/ThreadSwitcher'
 import TaskProgress from '../components/TaskProgress'
 
-const BrowserPreview = lazy(() => import('../components/BrowserPreview'))
 
 type ActiveChatPageProps = {
   messages: HarnessMessage[]
@@ -56,9 +55,6 @@ export default memo(function ActiveChatPage({
   const updateTitle = useAppStore((s) => s.updateTitle)
   const deleteThread = useAppStore((s) => s.deleteThread)
   const threadId = useAppStore((s) => s.threadId)
-  const browserPreviewOpen = useAppStore((s) => s.browserPreviewOpen)
-  const toggleBrowserPreview = useAppStore((s) => s.toggleBrowserPreview)
-
   const [editing, setEditing] = useState(false)
   const [editValue, setEditValue] = useState('')
   const [showSwitcher, setShowSwitcher] = useState(false)
@@ -138,18 +134,6 @@ export default memo(function ActiveChatPage({
             </button>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={toggleBrowserPreview}
-              className={`flex items-center gap-1.5 rounded-[10px] font-secondary text-[13px] font-semibold transition-colors ${
-                browserPreviewOpen
-                  ? 'bg-primary text-primary-foreground'
-                  : 'border border-primary text-primary hover:bg-primary/10'
-              }`}
-              style={{ padding: '8px 14px' }}
-            >
-              <span className="material-icon" style={{ fontSize: 16 }}>language</span>
-              Preview
-            </button>
             <button
               onClick={() => threadId && deleteThread(threadId)}
               className="flex items-center justify-center border border-border rounded-[10px] text-muted-dim hover:bg-card hover:text-foreground transition-colors"
@@ -238,12 +222,6 @@ export default memo(function ActiveChatPage({
             </div>
           </div>
 
-          {/* Browser Preview panel */}
-          {browserPreviewOpen && (
-            <Suspense fallback={null}>
-              <BrowserPreview />
-            </Suspense>
-          )}
         </div>
       </div>
     </PageShell>

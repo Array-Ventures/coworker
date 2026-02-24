@@ -46813,6 +46813,461 @@
           ]
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "OV8xS",
+      "x": 5919,
+      "y": 15460,
+      "name": "Execute Command Tool Output",
+      "width": 460,
+      "layout": "vertical",
+      "gap": 24,
+      "children": [
+        {
+          "type": "text",
+          "id": "QV7Ar",
+          "name": "label1",
+          "fill": "#999999",
+          "content": "Collapsed (current — broken)",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "jpzLO",
+          "name": "Execute Cmd — Current",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "TN2tu",
+              "name": "oldHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "cE9MS",
+                  "name": "oldStatus",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "lZJ8z",
+                  "name": "oldIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "terminal",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "enSwh",
+                  "name": "oldLabel",
+                  "fill": "$--foreground",
+                  "content": "Execute Command",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "BTMBc",
+                  "name": "oldPill",
+                  "fill": "$--secondary",
+                  "cornerRadius": 4,
+                  "padding": [
+                    2,
+                    6
+                  ],
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "9TX2B",
+                      "name": "oldPillText",
+                      "fill": "$--foreground",
+                      "content": "npm install @mastra/core --save",
+                      "fontFamily": "JetBrains Mono",
+                      "fontSize": 11,
+                      "fontWeight": "normal"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "GlMDX",
+                  "name": "oldSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "text",
+                  "id": "0wdfl",
+                  "name": "oldDur",
+                  "fill": "$--muted-foreground",
+                  "content": "1240ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "yX68I",
+                  "name": "oldChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_down",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "Guny4",
+          "name": "label2",
+          "fill": "#999999",
+          "content": "Proposed — command as text",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "0HinC",
+          "name": "Execute Cmd — Proposed",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "M97ss",
+              "name": "nHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "juGWs",
+                  "name": "nStatus",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "Ogg8b",
+                  "name": "nIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "terminal",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "S607H",
+                  "name": "nLabel",
+                  "fill": "$--foreground",
+                  "content": "Execute Command",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "sW3na",
+                  "name": "nHeaderSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "UHRh9",
+                  "name": "nDurSep",
+                  "width": 1,
+                  "height": 12,
+                  "fill": "$--border"
+                },
+                {
+                  "type": "text",
+                  "id": "JeQD4",
+                  "name": "nDur",
+                  "fill": "$--muted-foreground",
+                  "content": "1240ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "Wce9F",
+                  "name": "nChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_up",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "jT4Mt",
+              "name": "nCmdRow",
+              "width": "fill_container",
+              "gap": 6,
+              "padding": [
+                0,
+                12,
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "4zwM8",
+                  "name": "nPrompt",
+                  "fill": "$--muted-foreground",
+                  "content": "$",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "N81no",
+                  "name": "nCmd",
+                  "fill": "$--foreground",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "npm install @mastra/core --save",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "8NTGR",
+              "name": "nDivider",
+              "width": "fill_container",
+              "height": 1,
+              "fill": "$--border"
+            },
+            {
+              "type": "frame",
+              "id": "IGUE2",
+              "name": "nOutput",
+              "width": "fill_container",
+              "fill": "$--background",
+              "layout": "vertical",
+              "padding": [
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "GVIJc",
+                  "name": "nOutputText",
+                  "fill": "$--muted-foreground",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "added 1 package, and audited 847 packages in 3s\n\n142 packages are looking for funding\n  run `npm fund` for details\n\nfound 0 vulnerabilities",
+                  "lineHeight": 1.5,
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "id": "JI2CD",
+          "name": "label3",
+          "fill": "#999999",
+          "content": "Proposed — collapsed",
+          "fontFamily": "Geist",
+          "fontSize": 12,
+          "fontWeight": "600"
+        },
+        {
+          "type": "frame",
+          "id": "XtCc9",
+          "name": "Execute Cmd — Collapsed",
+          "clip": true,
+          "width": "fill_container",
+          "fill": "$--card",
+          "cornerRadius": "$--radius-m",
+          "stroke": {
+            "align": "inside",
+            "thickness": 1,
+            "fill": "$--border"
+          },
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "Ns5ah",
+              "name": "cHeader",
+              "width": "fill_container",
+              "gap": 8,
+              "padding": [
+                8,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon_font",
+                  "id": "c0m2d",
+                  "name": "cStatus",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "check_circle",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--color-success"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "d2Mg4",
+                  "name": "cIcon",
+                  "width": 15,
+                  "height": 15,
+                  "iconFontName": "terminal",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--foreground"
+                },
+                {
+                  "type": "text",
+                  "id": "IRCOm",
+                  "name": "cLabel",
+                  "fill": "$--foreground",
+                  "content": "Execute Command",
+                  "fontFamily": "Geist",
+                  "fontSize": 13,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "frame",
+                  "id": "X3z61",
+                  "name": "cSpacer",
+                  "width": "fill_container",
+                  "height": 1
+                },
+                {
+                  "type": "frame",
+                  "id": "OGXiU",
+                  "name": "cDurSep",
+                  "width": 1,
+                  "height": 12,
+                  "fill": "$--border"
+                },
+                {
+                  "type": "text",
+                  "id": "8DXt3",
+                  "name": "cDur",
+                  "fill": "$--muted-foreground",
+                  "content": "1240ms",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 11,
+                  "fontWeight": "normal"
+                },
+                {
+                  "type": "icon_font",
+                  "id": "PBSzH",
+                  "name": "cChevron",
+                  "width": 16,
+                  "height": 16,
+                  "iconFontName": "keyboard_arrow_down",
+                  "iconFontFamily": "Material Symbols Rounded",
+                  "fill": "$--muted-foreground"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "rJ1h9",
+              "name": "cCmdRow",
+              "width": "fill_container",
+              "gap": 6,
+              "padding": [
+                0,
+                12,
+                8,
+                12
+              ],
+              "children": [
+                {
+                  "type": "text",
+                  "id": "4fU01",
+                  "name": "cPrompt",
+                  "fill": "$--muted-foreground",
+                  "content": "$",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 12,
+                  "fontWeight": "600"
+                },
+                {
+                  "type": "text",
+                  "id": "HUERX",
+                  "name": "cCmd",
+                  "fill": "$--foreground",
+                  "textGrowth": "fixed-width",
+                  "width": "fill_container",
+                  "content": "npm install @mastra/core --save",
+                  "fontFamily": "JetBrains Mono",
+                  "fontSize": 12,
+                  "fontWeight": "normal"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {

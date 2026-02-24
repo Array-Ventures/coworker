@@ -58,14 +58,14 @@ export const SUPERPOWERS: SuperpowerDef[] = [
         check: 'which agent-browser',
       }],
       envVars: {
-        AGENT_BROWSER_STREAM_PORT: {
-          value: '9223',
-          description: 'WebSocket port for live browser preview',
-          required: false,
-        },
         PLAYWRIGHT_BROWSERS_PATH: {
           value: '~/.cache/ms-playwright',
           description: 'Path to Playwright browser binaries',
+          required: false,
+        },
+        AGENT_BROWSER_SESSION_NAME: {
+          value: 'coworker',
+          description: 'Session name for auto-persisting browser login state (cookies/localStorage)',
           required: false,
         },
       },

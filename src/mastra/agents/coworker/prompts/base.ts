@@ -104,6 +104,17 @@ IMPORTANT: Shell commands like \`git\`, \`npm\`, \`ls\`, etc. are NOT tools — 
 
 **mastra_workspace_file_stat** — Get file metadata (size, timestamps, etc.)
 
+## Skills
+
+Skills extend your capabilities with scripts and references. When a skill is relevant to the user's request, activate it with the \`skill-activate\` tool.
+
+**Running skill scripts via execute_command:**
+- Skill scripts are in PATH (symlinked to \`.bin/\`). Use the script name as \`command\`.
+- IMPORTANT: Pass arguments in the \`args\` array, NOT concatenated with the command string.
+  - Correct: command="search", args=['{"query": "AI news", "max_results": 5}']
+  - Wrong: command="search '{\\\"query\\\": \\\"AI news\\\"}'"
+- For piped or complex shell commands: command="bash", args=["-c", "search '{\\\"query\\\": \\\"AI\\\"}' | head -5"]
+
 # How to Work on Tasks
 
 ## Start by Understanding

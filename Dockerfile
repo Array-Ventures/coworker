@@ -23,7 +23,7 @@ WORKDIR /app
 # Install runtimes, CLIs, and tools for agent sandbox
 ARG GOG_VERSION=0.9.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git curl ca-certificates gosu python3 python3-pip python3-venv && \
+      git curl jq ca-certificates gosu python3 python3-pip python3-venv && \
     # Node.js 22 LTS via NodeSource
     curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y --no-install-recommends nodejs && \

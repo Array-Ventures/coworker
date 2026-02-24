@@ -43,6 +43,48 @@ function collectSkillPaths(): string[] {
 /** Pre-computed at startup; exported for sync-skills-bin route */
 export const skillPaths = collectSkillPaths();
 
+/**
+ * Sync skill scripts into .bin/ directory.
+ * - Strips .sh/.bash extensions so `search.sh` becomes `.bin/search`
+ * - chmod +x on source scripts
+ * - First-found wins for name collisions
+ */
+export function syncSkillsBin(): number {
+  const binDir = path.join(WORKSPACE_PATH, '.bin');
+  fs.mkdirSync(binDir, { recursive: true });
+  // Remove old symlinks
+  for (const f of fs.readdirSync(binDir)) {
+    const p = path.join(binDir, f);
+    try { if (fs.lstatSync(p).isSymbolicLink()) fs.unlinkSync(p); } catch {}
+  }
+  // Create fresh symlinks from all skill directories
+  let linked = 0;
+  for (const skillsDir of skillPaths) {
+    if (!fs.existsSync(skillsDir)) continue;
+    for (const skill of fs.readdirSync(skillsDir)) {
+      const scriptsDir = path.join(skillsDir, skill, 'scripts');
+      if (!fs.existsSync(scriptsDir)) continue;
+      for (const script of fs.readdirSync(scriptsDir)) {
+        const src = path.join(scriptsDir, script);
+        if (!fs.statSync(src).isFile()) continue;
+        // Strip .sh/.bash extension for cleaner command names
+        const destName = script.replace(/\.(sh|bash)$/, '');
+        const dest = path.join(binDir, destName);
+        // Skip if already linked (first-found wins for name collisions)
+        if (fs.existsSync(dest)) continue;
+        // Ensure source is executable
+        try { fs.chmodSync(src, 0o755); } catch {}
+        fs.symlinkSync(src, dest);
+        linked++;
+      }
+    }
+  }
+  return linked;
+}
+
+// Sync skill scripts into .bin/ at startup
+syncSkillsBin();
+
 export function getDynamicWorkspace({ requestContext }: { requestContext: RequestContext }) {
   const detection = LocalSandbox.detectIsolation();
   const userEnv = agentConfig.getSandboxEnv();

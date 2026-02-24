@@ -17,9 +17,8 @@ import { type BrainSlice, createBrainSlice } from './slices/brainSlice'
 import { type ThreadsSlice, createThreadsSlice } from './slices/threadsSlice'
 import { type ActivitySlice, createActivitySlice } from './slices/activitySlice'
 import { type SuperpowersSlice, createSuperpowersSlice } from './slices/superpowersSlice'
-import { type BrowserPreviewSlice, createBrowserPreviewSlice } from './slices/browserPreviewSlice'
 
-export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & GhSlice & BrainSlice & ThreadsSlice & ActivitySlice & SuperpowersSlice & BrowserPreviewSlice
+export type AppStore = UISlice & ChatSlice & PreferencesSlice & SkillsSlice & ScheduledTasksSlice & WhatsAppSlice & McpSlice & McpRegistrySlice & A2aSlice & GogSlice & GhSlice & BrainSlice & ThreadsSlice & ActivitySlice & SuperpowersSlice
 
 export const useAppStore = create<AppStore>()((...a) => ({
   ...createUISlice(...a),
@@ -37,5 +36,4 @@ export const useAppStore = create<AppStore>()((...a) => ({
   ...createThreadsSlice(...a),
   ...createActivitySlice(...a),
   ...createSuperpowersSlice(...a),
-  ...createBrowserPreviewSlice(...a),
 }))
