@@ -1,6 +1,7 @@
 import { registerApiRoute } from '@mastra/core/server';
 
 const STREAM_PORT = process.env.AGENT_BROWSER_STREAM_PORT || '9223';
+const UPSTREAM_RECONNECT_MS = 2000;
 
 /**
  * SSE + POST proxy: renderer ↔ Mastra server ↔ agent-browser daemon.
@@ -13,77 +14,101 @@ const STREAM_PORT = process.env.AGENT_BROWSER_STREAM_PORT || '9223';
  * POST /browser-stream/input — Forward mouse/keyboard events (client → server)
  */
 
-// Each SSE client gets its own upstream WebSocket. We track them by a simple
-// incrementing ID so the input endpoint can find the right connection.
 let nextId = 0;
 const upstreams = new Map<number, WebSocket>();
 
-function connectUpstream(clientId: number, controller: ReadableStreamDefaultController<Uint8Array>) {
-  const encoder = new TextEncoder();
+interface StreamClient {
+  clientId: number;
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  encoder: TextEncoder;
+  alive: boolean;
+  reconnectTimer: ReturnType<typeof setTimeout> | null;
+}
+
+function send(client: StreamClient, event: string, data: string) {
+  try {
+    client.controller.enqueue(client.encoder.encode(`event: ${event}\ndata: ${data}\n\n`));
+  } catch {
+    // stream closed
+  }
+}
+
+function connectUpstream(client: StreamClient) {
+  if (!client.alive) return;
+
   let ws: WebSocket;
   try {
     ws = new WebSocket(`ws://localhost:${STREAM_PORT}`);
   } catch {
-    controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: 'agent-browser not running' })}\n\n`));
-    controller.close();
-    return null;
+    // agent-browser not running — retry later
+    scheduleReconnect(client);
+    return;
   }
 
   ws.onopen = () => {
-    upstreams.set(clientId, ws);
-    controller.enqueue(encoder.encode(`event: connected\ndata: ${JSON.stringify({ clientId })}\n\n`));
+    upstreams.set(client.clientId, ws);
+    send(client, 'connected', JSON.stringify({ clientId: client.clientId }));
   };
 
   ws.onmessage = (e) => {
-    try {
-      const raw = typeof e.data === 'string' ? e.data : '';
-      controller.enqueue(encoder.encode(`event: frame\ndata: ${raw}\n\n`));
-    } catch {
-      // client disconnected — stream controller closed
-    }
+    send(client, 'frame', typeof e.data === 'string' ? e.data : '');
   };
 
   ws.onclose = () => {
-    upstreams.delete(clientId);
-    try {
-      controller.enqueue(encoder.encode(`event: closed\ndata: {}\n\n`));
-      controller.close();
-    } catch {
-      // already closed
-    }
+    upstreams.delete(client.clientId);
+    scheduleReconnect(client);
   };
 
   ws.onerror = () => {
-    upstreams.delete(clientId);
-    try {
-      controller.enqueue(encoder.encode(`event: error\ndata: {}\n\n`));
-      controller.close();
-    } catch {
-      // already closed
-    }
+    upstreams.delete(client.clientId);
+    // onclose fires after onerror — reconnect happens there
   };
+}
 
-  return ws;
+function scheduleReconnect(client: StreamClient) {
+  if (!client.alive) return;
+  if (client.reconnectTimer) return; // already scheduled
+  client.reconnectTimer = setTimeout(() => {
+    client.reconnectTimer = null;
+    connectUpstream(client);
+  }, UPSTREAM_RECONNECT_MS);
+}
+
+function cleanupClient(client: StreamClient) {
+  client.alive = false;
+  if (client.reconnectTimer) {
+    clearTimeout(client.reconnectTimer);
+    client.reconnectTimer = null;
+  }
+  const ws = upstreams.get(client.clientId);
+  if (ws) {
+    ws.onclose = null; // prevent reconnect from close handler
+    ws.close();
+    upstreams.delete(client.clientId);
+  }
 }
 
 export const browserStreamRoutes = [
-  /**
-   * SSE endpoint — streams frames from agent-browser's WebSocket to the client.
-   * Each connection gets its own upstream WebSocket.
-   */
   registerApiRoute('/browser-stream', {
     method: 'GET',
     handler: async (c) => {
       const clientId = nextId++;
-      let upstream: WebSocket | null = null;
+
+      const client: StreamClient = {
+        clientId,
+        controller: null as any, // set in start()
+        encoder: new TextEncoder(),
+        alive: true,
+        reconnectTimer: null,
+      };
 
       const stream = new ReadableStream<Uint8Array>({
         start(controller) {
-          upstream = connectUpstream(clientId, controller);
+          client.controller = controller;
+          connectUpstream(client);
         },
         cancel() {
-          upstream?.close();
-          upstreams.delete(clientId);
+          cleanupClient(client);
         },
       });
 
@@ -92,29 +117,22 @@ export const browserStreamRoutes = [
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
-          'X-Browser-Stream-Client': String(clientId),
         },
       });
     },
   }),
 
-  /**
-   * Input forwarding — receives mouse/keyboard events and sends them to
-   * the upstream agent-browser WebSocket.
-   */
   registerApiRoute('/browser-stream/input', {
     method: 'POST',
     handler: async (c) => {
       const body = await c.req.json();
       const clientId = body.clientId as number | undefined;
 
-      // Find the upstream — prefer specific clientId, fall back to first active
       let ws: WebSocket | undefined;
       if (clientId !== undefined) {
         ws = upstreams.get(clientId);
       }
       if (!ws) {
-        // Fall back to the most recent upstream connection
         const entries = [...upstreams.values()];
         ws = entries[entries.length - 1];
       }
