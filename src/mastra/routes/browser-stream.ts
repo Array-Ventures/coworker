@@ -46,20 +46,25 @@ function connectUpstream(client: StreamClient) {
   }
 
   ws.onopen = () => {
+    console.log(`[browser-stream] upstream connected for client ${client.clientId}`);
     upstreams.set(client.clientId, ws);
     send(client, 'connected', JSON.stringify({ clientId: client.clientId }));
   };
 
   ws.onmessage = (e) => {
-    send(client, 'frame', typeof e.data === 'string' ? e.data : '');
+    const raw = typeof e.data === 'string' ? e.data : '';
+    console.log(`[browser-stream] upstream msg: ${raw.slice(0, 200)}`);
+    send(client, 'frame', raw);
   };
 
   ws.onclose = () => {
+    console.log(`[browser-stream] upstream closed for client ${client.clientId}`);
     upstreams.delete(client.clientId);
     scheduleReconnect(client);
   };
 
   ws.onerror = () => {
+    console.log(`[browser-stream] upstream error for client ${client.clientId}`);
     upstreams.delete(client.clientId);
     // onclose fires after onerror — reconnect happens there
   };
