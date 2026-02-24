@@ -20,7 +20,14 @@ const upstreams = new Map<number, WebSocket>();
 
 function connectUpstream(clientId: number, controller: ReadableStreamDefaultController<Uint8Array>) {
   const encoder = new TextEncoder();
-  const ws = new WebSocket(`ws://localhost:${STREAM_PORT}`);
+  let ws: WebSocket;
+  try {
+    ws = new WebSocket(`ws://localhost:${STREAM_PORT}`);
+  } catch {
+    controller.enqueue(encoder.encode(`event: error\ndata: ${JSON.stringify({ error: 'agent-browser not running' })}\n\n`));
+    controller.close();
+    return null;
+  }
 
   ws.onopen = () => {
     upstreams.set(clientId, ws);

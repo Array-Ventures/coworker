@@ -29,6 +29,7 @@ export function authHeaders(): Record<string, string> {
   return { Authorization: `Bearer ${MASTRA_API_TOKEN}` }
 }
 
+
 function rebuildClient() {
   mastraClient = new MastraClient({
     baseUrl: MASTRA_BASE_URL,
