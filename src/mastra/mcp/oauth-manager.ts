@@ -57,7 +57,7 @@ function createProvider(
   callbackBaseUrl?: string,
 ): MCPOAuthClientProvider {
   const redirectUrl = getRedirectUrl(callbackBaseUrl);
-  return new MCPOAuthClientProvider({
+  const provider = new MCPOAuthClientProvider({
     redirectUrl,
     clientMetadata: {
       redirect_uris: [redirectUrl],
@@ -67,6 +67,13 @@ function createProvider(
     },
     storage: createFileOAuthStorage(serverId),
   });
+
+  // Fix: MCPOAuthClientProvider defines addClientAuthentication as a no-op,
+  // which makes the SDK skip its built-in client auth (client_id in params).
+  // Delete it so the SDK falls back to its own selectClientAuthMethod logic.
+  delete (provider as any).addClientAuthentication;
+
+  return provider;
 }
 
 /**
