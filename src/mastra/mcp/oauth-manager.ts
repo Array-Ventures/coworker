@@ -7,6 +7,23 @@ import { createFileOAuthStorage, hasOAuthTokens } from './oauth-storage';
 
 const CLIENT_NAME = 'Coworker AI';
 
+/**
+ * Workaround for MCP SDK `instanceof Response` bug in Bun.
+ * The SDK's parseErrorResponse uses `instanceof Response` which fails when
+ * the Response class comes from a different context. This wrapper ensures
+ * all responses are globalThis.Response instances.
+ */
+const wrappedFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init);
+  if (res instanceof Response) return res;
+  // Re-wrap as a proper globalThis.Response
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: new Headers(res.headers),
+  });
+};
+
 interface PendingOAuth {
   provider: MCPOAuthClientProvider;
   serverUrl: string;
@@ -83,7 +100,7 @@ export async function startMcpOAuth(
   };
 
   try {
-    const result = await auth(provider, { serverUrl });
+    const result = await auth(provider, { serverUrl, fetchFn: wrappedFetch });
     if (result === 'AUTHORIZED') {
       return { authUrl: '' };
     }
@@ -129,6 +146,7 @@ export async function handleMcpOAuthCallback(
       const result = await auth(flow.provider, {
         serverUrl: flow.serverUrl,
         authorizationCode: code,
+        fetchFn: wrappedFetch,
       });
       if (result === 'AUTHORIZED') {
         pendingFlows.delete(serverId);

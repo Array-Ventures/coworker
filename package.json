@@ -36,6 +36,7 @@
     "@mastra/observability": "^1.2.1",
     "@mcp-ui/server": "^6.1.0",
     "@modelcontextprotocol/ext-apps": "^1.0.1",
+    "@modelcontextprotocol/sdk": "^1.27.1",
     "@types/dompurify": "^3.2.0",
     "@whiskeysockets/baileys": "^7.0.0-rc.9",
     "agent-browser": "^0.14.0",
