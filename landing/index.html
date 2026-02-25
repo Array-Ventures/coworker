@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Luna — Your Loyal Assistant</title>
-  <meta name="description" content="Luna is an open-source loyal assistant that handles tasks, answers questions, and manages workflows. Built with love.">
+  <title>Luna — Your Loyal AI Assistant</title>
+  <meta name="description" content="Luna is an open-source loyal AI assistant that handles tasks, answers questions, and manages workflows.">
   <style>
     @font-face {
       font-family: 'Departure Mono';
@@ -15,799 +15,629 @@
       font-display: swap;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --green: #00ff41;
-      --green-dim: #00aa2a;
-      --green-dark: #005518;
-      --green-glow: rgba(0, 255, 65, 0.35);
-      --cyan: #00ffd5;
-      --bg: #000000;
-      --bg-subtle: #0a0a0a;
-      --gray: #333333;
-      --gray-light: #555555;
+      --black: #1a1a1a;
+      --dark: #2a2a2a;
+      --gray: #888;
+      --light: #e8e8e8;
+      --bg: #f5f5f0;
+      --white: #ffffff;
+      --accent: #1a1a1a;
     }
 
-    html {
-      scroll-behavior: smooth;
-    }
+    html { scroll-behavior: smooth; }
 
     body {
       background: var(--bg);
-      color: var(--green);
-      font-family: 'Departure Mono', monospace;
-      font-size: 11px;
+      color: var(--black);
+      font-family: 'Departure Mono', 'Courier New', monospace;
+      font-size: 13px;
       line-height: 1.6;
       overflow-x: hidden;
       min-height: 100vh;
     }
 
-    /* ── CRT Overlay ── */
-    body::before {
-      content: '';
+    /* ── Nav ── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 48px;
       position: fixed;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 100%;
-      background: repeating-linear-gradient(
-        0deg,
-        rgba(0, 0, 0, 0.15) 0px,
-        rgba(0, 0, 0, 0.15) 1px,
-        transparent 1px,
-        transparent 2px
-      );
-      pointer-events: none;
-      z-index: 1000;
+      right: 0;
+      z-index: 100;
+      background: var(--bg);
     }
 
-    /* ── Scanline sweep ── */
-    body::after {
-      content: '';
-      position: fixed;
-      top: -100%;
-      left: 0;
-      width: 100%;
-      height: 6px;
-      background: linear-gradient(
-        180deg,
-        transparent,
-        rgba(0, 255, 65, 0.08),
-        rgba(255, 255, 255, 0.04),
-        rgba(0, 255, 65, 0.08),
-        transparent
-      );
-      pointer-events: none;
-      z-index: 1001;
-      animation: scanline 6s linear infinite;
+    .nav-logo {
+      font-size: 14px;
+      font-weight: normal;
+      color: var(--black);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
 
-    @keyframes scanline {
-      0%   { top: -6px; }
-      100% { top: 100%; }
+    .nav-logo-icon {
+      width: 24px;
+      height: 24px;
+      display: inline-block;
+      font-size: 18px;
+      line-height: 24px;
     }
 
-    @keyframes flicker {
-      0%, 100% { opacity: 1; }
-      50%      { opacity: 0.97; }
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      list-style: none;
     }
 
-    @keyframes glow-pulse {
-      0%, 100% { text-shadow: 0 0 8px var(--green-glow), 0 0 20px rgba(0, 255, 65, 0.1); }
-      50%      { text-shadow: 0 0 12px var(--green-glow), 0 0 30px rgba(0, 255, 65, 0.18); }
+    .nav-links a {
+      color: var(--gray);
+      text-decoration: none;
+      font-size: 12px;
+      transition: color 0.2s;
     }
 
-    @keyframes cursor-blink {
-      0%, 100% { opacity: 1; }
-      50%      { opacity: 0; }
+    .nav-links a:hover {
+      color: var(--black);
     }
 
-    @keyframes fade-in-up {
-      from { opacity: 0; transform: translateY(20px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    /* ── Hero Section ── */
+    /* ── Hero ── */
     .hero {
       min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      padding: 100px 48px 48px;
+      gap: 40px;
+    }
+
+    .hero-left {
+      max-width: 520px;
+    }
+
+    .hero-title {
+      font-family: 'Departure Mono', monospace;
+      font-size: 72px;
+      line-height: 0.95;
+      letter-spacing: -0.02em;
+      color: var(--black);
+      margin-bottom: 24px;
+      font-weight: normal;
+    }
+
+    .hero-title span {
+      display: block;
+    }
+
+    .hero-subtitle {
+      font-size: 14px;
+      color: var(--gray);
+      line-height: 1.7;
+      margin-bottom: 36px;
+      max-width: 400px;
+    }
+
+    .hero-actions {
       display: flex;
-      flex-direction: column;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .btn-primary {
+      font-family: 'Departure Mono', monospace;
+      font-size: 12px;
+      padding: 14px 32px;
+      background: var(--black);
+      color: var(--white);
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-block;
+      transition: background 0.2s;
+    }
+
+    .btn-primary:hover {
+      background: var(--dark);
+    }
+
+    .btn-text {
+      font-family: 'Departure Mono', monospace;
+      font-size: 12px;
+      color: var(--gray);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .btn-text:hover {
+      color: var(--black);
+    }
+
+    .btn-text::after {
+      content: ' >';
+    }
+
+    /* ── ASCII Art Container ── */
+    .hero-right {
+      display: flex;
       align-items: center;
       justify-content: center;
-      padding: 40px 20px;
       position: relative;
-      animation: flicker 4s infinite;
     }
 
-    .ascii-container {
-      position: relative;
-      margin-bottom: 30px;
-    }
-
-    #luna-ascii {
+    .ascii-art {
       font-family: 'Departure Mono', monospace;
-      font-size: 11px;
-      line-height: 1.15;
-      letter-spacing: 0.05em;
-      color: var(--green);
-      text-shadow: 0 0 8px var(--green-glow), 0 0 20px rgba(0, 255, 65, 0.1);
-      animation: glow-pulse 3s ease-in-out infinite;
+      font-size: 5.5px;
+      line-height: 1.0;
+      letter-spacing: 0.02em;
+      color: var(--black);
       white-space: pre;
-      text-align: center;
       user-select: none;
+      opacity: 0.85;
     }
 
-    .title {
-      font-size: 44px;
-      line-height: 1.1;
-      letter-spacing: 0.15em;
-      color: var(--green);
-      text-shadow:
-        0 0 10px var(--green-glow),
-        0 0 30px rgba(0, 255, 65, 0.15),
-        0 0 60px rgba(0, 255, 65, 0.08);
-      margin-bottom: 12px;
-      text-align: center;
-    }
-
-    .tagline {
-      font-size: 14px;
-      color: var(--green-dim);
-      text-align: center;
-      min-height: 1.6em;
-      margin-bottom: 40px;
-    }
-
-    .tagline .cursor {
-      display: inline-block;
-      width: 8px;
-      height: 14px;
-      background: var(--green);
-      margin-left: 2px;
-      vertical-align: text-bottom;
-      animation: cursor-blink 1s step-end infinite;
-    }
-
-    /* ── CTA Buttons ── */
-    .cta-row {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 20px;
-    }
-
-    .cta-btn {
-      font-family: 'Departure Mono', monospace;
-      font-size: 13px;
-      padding: 12px 28px;
-      border: 1px solid var(--green-dim);
-      background: transparent;
-      color: var(--green);
-      text-decoration: none;
-      cursor: pointer;
-      transition: all 0.2s;
-      display: inline-block;
-    }
-
-    .cta-btn:hover {
-      background: var(--green);
-      color: var(--bg);
-      box-shadow: 0 0 15px var(--green-glow), 0 0 30px rgba(0, 255, 65, 0.1);
-    }
-
-    .cta-btn.primary {
-      background: var(--green-dark);
-      border-color: var(--green);
-    }
-
-    /* ── Scroll indicator ── */
-    .scroll-hint {
-      position: absolute;
-      bottom: 30px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: var(--green-dark);
-      font-size: 11px;
-      text-align: center;
-      animation: fade-in-up 2s ease-out 6s both;
-    }
-
-    .scroll-hint .arrow {
-      display: block;
-      margin-top: 4px;
-      animation: bounce 2s infinite;
-    }
-
-    @keyframes bounce {
-      0%, 100% { transform: translateY(0); }
-      50%      { transform: translateY(5px); }
-    }
-
-    /* ── Features Section ── */
+    /* ── Features ── */
     .features {
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
-      padding: 80px 20px;
+      padding: 80px 48px;
     }
 
-    .features-title {
-      font-size: 22px;
-      color: var(--green);
-      text-align: center;
-      margin-bottom: 50px;
-      text-shadow: 0 0 10px var(--green-glow);
+    .section-title {
+      font-size: 28px;
+      color: var(--black);
+      margin-bottom: 48px;
+      font-weight: normal;
     }
 
     .features-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 30px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
     }
 
     .feature {
-      border: 1px solid var(--gray);
-      padding: 24px;
-      opacity: 0;
-      transform: translateY(20px);
-      transition: all 0.5s ease-out;
-    }
-
-    .feature.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    .feature:hover {
-      border-color: var(--green-dark);
-      box-shadow: 0 0 10px rgba(0, 255, 65, 0.05);
-    }
-
-    .feature-icon {
-      font-size: 18px;
-      margin-bottom: 10px;
-      display: block;
+      padding: 24px 0;
+      border-top: 1px solid var(--light);
     }
 
     .feature-name {
       font-size: 13px;
-      color: var(--green);
-      margin-bottom: 6px;
+      color: var(--black);
+      margin-bottom: 8px;
     }
 
     .feature-desc {
       font-size: 11px;
-      color: var(--green-dark);
-      line-height: 1.5;
+      color: var(--gray);
+      line-height: 1.6;
     }
 
     /* ── Terminal CTA ── */
     .terminal-section {
       max-width: 600px;
       margin: 0 auto;
-      padding: 60px 20px;
+      padding: 60px 48px;
       text-align: center;
     }
 
     .terminal-block {
-      border: 1px solid var(--gray);
-      padding: 20px 24px;
+      border: 1px solid var(--light);
+      padding: 24px 28px;
       text-align: left;
-      margin-bottom: 30px;
-      position: relative;
-      background: var(--bg-subtle);
+      margin-bottom: 32px;
+      background: var(--white);
     }
 
-    .terminal-block::before {
-      content: 'terminal';
-      position: absolute;
-      top: -10px;
-      left: 12px;
-      background: var(--bg);
-      padding: 0 8px;
-      font-size: 10px;
-      color: var(--gray-light);
-    }
-
-    .terminal-line {
-      color: var(--green-dim);
+    .terminal-block .line {
       font-size: 12px;
-      line-height: 1.8;
+      color: var(--gray);
+      line-height: 2;
     }
 
-    .terminal-line .prompt {
-      color: var(--green);
+    .terminal-block .line .prompt {
+      color: var(--black);
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
     }
 
     /* ── Footer ── */
-    .footer {
+    footer {
       text-align: center;
-      padding: 40px 20px;
-      border-top: 1px solid var(--gray);
-      color: var(--green-dark);
+      padding: 48px;
+      border-top: 1px solid var(--light);
       font-size: 11px;
+      color: var(--gray);
     }
 
-    .footer a {
-      color: var(--green-dim);
+    footer a {
+      color: var(--black);
       text-decoration: none;
     }
 
-    .footer a:hover {
-      color: var(--green);
-    }
-
     /* ── Responsive ── */
-    @media (max-width: 768px) {
-      .title {
-        font-size: 28px;
-        letter-spacing: 0.1em;
+    @media (max-width: 900px) {
+      .hero {
+        grid-template-columns: 1fr;
+        text-align: center;
+        padding-top: 120px;
       }
 
-      #luna-ascii {
-        font-size: 7px;
-        letter-spacing: 0;
+      .hero-left {
+        max-width: 100%;
+      }
+
+      .hero-subtitle {
+        max-width: 100%;
+      }
+
+      .hero-actions {
+        justify-content: center;
+      }
+
+      .hero-right {
+        order: -1;
+      }
+
+      .ascii-art {
+        font-size: 3.5px;
+      }
+
+      .hero-title {
+        font-size: 48px;
       }
 
       .features-grid {
         grid-template-columns: 1fr;
       }
 
-      .cta-row {
-        flex-direction: column;
-        align-items: center;
+      nav {
+        padding: 16px 24px;
+      }
+
+      .nav-links {
+        display: none;
       }
     }
 
     @media (max-width: 480px) {
-      #luna-ascii {
-        font-size: 5px;
-      }
-
-      .title {
-        font-size: 22px;
-      }
+      .hero-title { font-size: 36px; }
+      .ascii-art { font-size: 2.8px; }
+      .hero { padding: 100px 24px 40px; }
+      .features { padding: 48px 24px; }
     }
   </style>
 </head>
 <body>
 
+  <!-- ── Nav ── -->
+  <nav>
+    <a class="nav-logo" href="#">
+      <span class="nav-logo-icon">~</span>
+      luna
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#get-started">Get Started</a></li>
+      <li><a href="https://github.com/Array-Ventures/coworker">GitHub</a></li>
+    </ul>
+  </nav>
+
   <!-- ── Hero ── -->
   <section class="hero">
-    <div class="ascii-container">
-      <pre id="luna-ascii" aria-label="ASCII art of Luna the corgi sitting at a laptop"></pre>
+    <div class="hero-left">
+      <h1 class="hero-title">
+        <span>LUNA</span>
+        <span>AI</span>
+        <span>AGENT</span>
+      </h1>
+      <p class="hero-subtitle">
+        Your loyal AI assistant, helping you
+        manage tasks, build apps, and make
+        smarter decisions.
+      </p>
+      <div class="hero-actions">
+        <a class="btn-primary" href="https://github.com/Array-Ventures/coworker">Get Started</a>
+        <a class="btn-text" href="#features">See How It Works</a>
+      </div>
     </div>
-
-    <h1 class="title">LUNA</h1>
-    <p class="tagline">
-      <span id="tagline-text"></span><span class="cursor"></span>
-    </p>
-
-    <div class="cta-row">
-      <a href="https://github.com/Array-Ventures/coworker" class="cta-btn primary">View on GitHub</a>
-      <a href="https://railway.com/deploy/coworker?referralCode=7FU369" class="cta-btn">Deploy on Railway</a>
-    </div>
-
-    <div class="scroll-hint">
-      scroll<span class="arrow">v</span>
+    <div class="hero-right">
+      <pre class="ascii-art" id="luna-art" aria-label="ASCII art of Luna the corgi"></pre>
     </div>
   </section>
 
   <!-- ── Features ── -->
-  <section class="features">
-    <h2 class="features-title">what luna can do</h2>
+  <section class="features" id="features">
+    <h2 class="section-title">What Luna can do</h2>
     <div class="features-grid">
       <div class="feature">
-        <span class="feature-icon">>&lt;</span>
-        <div class="feature-name">chat assistant</div>
-        <div class="feature-desc">answer questions, draft content, summarize documents, brainstorm ideas</div>
+        <div class="feature-name">Chat Assistant</div>
+        <div class="feature-desc">Answer questions, draft content, summarize documents, brainstorm ideas</div>
       </div>
       <div class="feature">
-        <span class="feature-icon">[#]</span>
-        <div class="feature-name">app builder</div>
-        <div class="feature-desc">create internal dashboards and tools, maintained with git version control</div>
+        <div class="feature-name">App Builder</div>
+        <div class="feature-desc">Create internal dashboards and tools, maintained with git version control</div>
       </div>
       <div class="feature">
-        <span class="feature-icon">{.}</span>
-        <div class="feature-name">skills marketplace</div>
-        <div class="feature-desc">install community-built skills and extend capabilities on the fly</div>
+        <div class="feature-name">Skills Marketplace</div>
+        <div class="feature-desc">Install community-built skills and extend capabilities on the fly</div>
       </div>
       <div class="feature">
-        <span class="feature-icon">~$_</span>
-        <div class="feature-name">scheduled tasks</div>
-        <div class="feature-desc">run recurring workflows on a cron schedule, fully autonomous</div>
+        <div class="feature-name">Scheduled Tasks</div>
+        <div class="feature-desc">Run recurring workflows on a cron schedule, fully autonomous</div>
       </div>
       <div class="feature">
-        <span class="feature-icon">@..</span>
-        <div class="feature-name">integrations</div>
-        <div class="feature-desc">google workspace, whatsapp, and any mcp-compatible service</div>
+        <div class="feature-name">Integrations</div>
+        <div class="feature-desc">Google Workspace, WhatsApp, and any MCP-compatible service</div>
       </div>
       <div class="feature">
-        <span class="feature-icon">^[]</span>
-        <div class="feature-name">file workspace</div>
-        <div class="feature-desc">upload, manage, and reference files in conversations</div>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">/~/</span>
-        <div class="feature-name">multi-provider</div>
-        <div class="feature-desc">openai, anthropic, google, nvidia, groq, or any compatible endpoint</div>
-      </div>
-      <div class="feature">
-        <span class="feature-icon">&lt;=&gt;</span>
-        <div class="feature-name">agent-to-agent</div>
-        <div class="feature-desc">let other agents discover and communicate via a2a protocol</div>
+        <div class="feature-name">Multi-Provider</div>
+        <div class="feature-desc">OpenAI, Anthropic, Google, Groq, or any compatible endpoint</div>
       </div>
     </div>
   </section>
 
-  <!-- ── Terminal CTA ── -->
-  <section class="terminal-section">
+  <!-- ── Get Started ── -->
+  <section class="terminal-section" id="get-started">
     <div class="terminal-block">
-      <div class="terminal-line"><span class="prompt">$ </span>git clone https://github.com/Array-Ventures/coworker</div>
-      <div class="terminal-line"><span class="prompt">$ </span>bun install</div>
-      <div class="terminal-line"><span class="prompt">$ </span>bun run dev</div>
+      <div class="line"><span class="prompt">$ </span>git clone https://github.com/Array-Ventures/coworker</div>
+      <div class="line"><span class="prompt">$ </span>bun install</div>
+      <div class="line"><span class="prompt">$ </span>bun run dev</div>
     </div>
     <div class="cta-row">
-      <a href="https://github.com/Array-Ventures/coworker" class="cta-btn primary">View on GitHub</a>
-      <a href="https://github.com/Array-Ventures/coworker/releases" class="cta-btn">Download App</a>
+      <a class="btn-primary" href="https://github.com/Array-Ventures/coworker">View on GitHub</a>
+      <a class="btn-text" href="https://github.com/Array-Ventures/coworker/releases">Download App</a>
     </div>
   </section>
 
   <!-- ── Footer ── -->
-  <footer class="footer">
-    <p>built by <a href="https://github.com/Array-Ventures">array ventures</a></p>
+  <footer>
+    built by <a href="https://github.com/Array-Ventures">array ventures</a>
   </footer>
 
   <script>
-    // ══════════════════════════════════════════════════════════
-    //  LUNA ASCII ART FRAMES
-    //  Block-shaded corgi at a laptop — side/3-quarter view
-    //  Characters: █ ▓ ▒ ░  (full, dark, medium, light, space)
-    //  Grid: ~62 wide × 28 tall
-    // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
+    //  LUNA — Horizontal-line "halftone" ASCII art
+    //
+    //  Technique: Dense horizontal lines (─) fill the background.
+    //  The corgi figure is carved out as NEGATIVE SPACE (blank/space).
+    //  Where the figure is, lines are broken/absent.
+    //  This creates a stencil/screen-print effect on a white page.
+    //
+    //  Grid: ~100 wide × 60 tall
+    //  Characters:  ─ (line), space (figure), . (light texture)
+    // ══════════════════════════════════════════════════════════════════
 
-    // F1: Base pose — sitting at laptop, paws on keyboard, eyes on screen
-    const F1 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"               ▄▄▄▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▄▄▄               ",
-"             ▄▓▒░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░▒▓▄             ",
-"            ▓▒░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░▒▓            ",
-"           ▓▒░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░▒▒▒░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░▒▓███▓▒░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░▒░░░░░░░░░░░▒░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░░▒▒▒░░░░░▒▒▒░░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░░░░▒▒▒▒▒░░░░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░░░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░░░ │▒▓▓▒░░░░░░░░░░░░░░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓▒░░░░░░░░░░░░░░▒▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
+    // Frame 1: Luna facing screen — ears up, sitting, front view of face
+    const F1 = `
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────                                      ──────────────────────────────────
+──────────────────────────                                          ────────────────────────────────
+────────────────────────               ──────────────                 ──────────────────────────────
+───────────────────────          ─────────────────────────              ────────────────────────────
+──────────────────────        ─────────────────────────────              ───────────────────────────
+─────────────────────       ─────────────────────────────────             ──────────────────────────
+──────────────────────     ────────────────────────────────────            ─────────────────────────
+───────────────────────   ──────────────────────────────────────           ─────────────────────────
+────────────────────────  ───────────────────────────────────────          ─────────────────────────
+──────────────────────── ─────────────────────────────────────────         ─────────────────────────
+───────────────────────  ──────────────────────────────────────────        ─────────────────────────
+───────────────────────  ──────────────────────────────────────────        ─────────────────────────
+───────────────────────  ──────────────────────────────────────────        ─────────────────────────
+───────────────────────  ───────────────────────────────────────────       ─────────────────────────
+──────────────────────  ─────────────────────────────────────────────      ─────────────────────────
+──────────────────────  ──────────────────────────────────────────────     ─────────────────────────
+─────────────────────  ────────────────────────────────────────────────    ─────────────────────────
+─────────────────────  ────────────────────────────────────────────────    ─────────────────────────
+─────────────────────  ─────────────────────────────────────────────────   ─────────────────────────
+────────────────────  ───────          ─────────────          ──────────   ─────────────────────────
+────────────────────  ──────            ───────────            ─────────   ─────────────────────────
+────────────────────  ─────   ───────    ─────────   ───────    ────────   ─────────────────────────
+────────────────────  ─────  ─────────   ─────────  ─────────   ────────   ─────────────────────────
+────────────────────  ─────  ─────────   ─────────  ─────────   ────────   ─────────────────────────
+────────────────────  ─────  ──────────  ─────────  ──────────  ────────   ─────────────────────────
+────────────────────  ──────  ─────────  ─────────  ─────────  ─────────   ─────────────────────────
+─────────────────────  ──────            ─────────            ─────────    ─────────────────────────
+─────────────────────  ───────          ─────────────          ────────    ─────────────────────────
+─────────────────────  ────────────────────────────────────────────────    ─────────────────────────
+─────────────────────  ────────────────────────────────────────────────    ─────────────────────────
+──────────────────────  ──────────────────────────────────────────────     ─────────────────────────
+──────────────────────  ──────────────────       ─────────────────────     ─────────────────────────
+──────────────────────  ─────────────────         ────────────────────     ─────────────────────────
+───────────────────────  ────────────────         ───────────────────      ─────────────────────────
+───────────────────────  ─────────────────       ────────────────────      ─────────────────────────
+───────────────────────   ───────────────────────────────────────────      ─────────────────────────
+────────────────────────  ──────────────────────────────────────────       ─────────────────────────
+─────────────────────────  ──────────          ──────────                  ─────────────────────────
+──────────────────────────  ──────                ──────                   ─────────────────────────
+───────────────────────────                                             ────────────────────────────
+──────────────────────────                                              ────────────────────────────
+─────────────────────────                                                ───────────────────────────
+────────────────────────                                                  ──────────────────────────
+───────────────────────                                                    ─────────────────────────
+──────────────────────                                                      ────────────────────────
+─────────────────────                                                        ───────────────────────
+─────────────────────                                                         ──────────────────────
+─────────────────────                                                          ─────────────────────
+─────────────────────                                                           ────────────────────
+─────────────────────                                                           ────────────────────
+──────────────────────                                                         ─────────────────────
+──────────────────────                                                         ─────────────────────
+───────────────────────                                                       ──────────────────────
+─────────────────────────                                                   ────────────────────────
+───────────────────────────                                              ───────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────`;
 
-    // F2: Left paw tap — left paw reaches toward keyboard
-    const F2 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"               ▄▄▄▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▄▄▄               ",
-"             ▄▓▒░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░▒▓▄             ",
-"            ▓▒░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░▒▓            ",
-"           ▓▒░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░▒▒▒░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░▒▓███▓▒░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░▒░░░░░░░░░░░▒░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░░▒▒▒░░░░░▒▒▒░░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░░░░▒▒▒▒▒░░░░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░░░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░*░ │▒▓▓▒░░░░░░░░░░░░░░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓░░░░░░░░░░░░░░░░▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
+    // Frame 2: Luna head turned slightly right — ears shift, face angled
+    const F2 = `
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+──────────────────────────────────                                ──────────────────────────────────
+────────────────────────────────                                    ────────────────────────────────
+──────────────────────────────             ──────────────              ─────────────────────────────
+─────────────────────────────        ─────────────────────────          ───────────────────────────
+────────────────────────────       ─────────────────────────────         ──────────────────────────
+───────────────────────────      ─────────────────────────────────        ─────────────────────────
+───────────────────────────     ────────────────────────────────────       ─────────────────────────
+───────────────────────────    ──────────────────────────────────────      ─────────────────────────
+───────────────────────────   ───────────────────────────────────────      ─────────────────────────
+───────────────────────────   ────────────────────────────────────────     ─────────────────────────
+───────────────────────────  ──────────────────────────────────────────    ─────────────────────────
+───────────────────────────  ──────────────────────────────────────────    ─────────────────────────
+───────────────────────────  ──────────────────────────────────────────    ─────────────────────────
+───────────────────────────  ───────────────────────────────────────────   ─────────────────────────
+──────────────────────────  ─────────────────────────────────────────────  ─────────────────────────
+──────────────────────────  ──────────────────────────────────────────────  ────────────────────────
+──────────────────────────  ────────────────────────────────────────────── ─────────────────────────
+──────────────────────────  ────────────────────────────────────────────── ─────────────────────────
+─────────────────────────  ──────────────────────────────────────────────── ────────────────────────
+─────────────────────────  ────────────          ──────────          ────── ────────────────────────
+─────────────────────────  ───────────            ─────────           ───── ────────────────────────
+─────────────────────────  ──────────   ───────    ────────   ───────  ──── ────────────────────────
+─────────────────────────  ──────────  ─────────   ────────  ─────────  ─── ────────────────────────
+─────────────────────────  ──────────  ─────────   ────────  ─────────  ─── ────────────────────────
+─────────────────────────  ──────────  ──────────  ────────  ──────────  ── ────────────────────────
+─────────────────────────  ───────────  ─────────  ────────  ─────────  ─── ────────────────────────
+──────────────────────────  ──────────            ──────────           ──── ────────────────────────
+──────────────────────────  ───────────          ────────────          ──── ────────────────────────
+──────────────────────────  ──────────────────────────────────────────────  ────────────────────────
+──────────────────────────  ──────────────────────────────────────────────  ────────────────────────
+──────────────────────────  ─────────────────────────────────────────────  ─────────────────────────
+───────────────────────────  ─────────────────          ─────────────────  ─────────────────────────
+───────────────────────────  ────────────────            ────────────────  ─────────────────────────
+───────────────────────────  ─────────────────          ────────────────   ─────────────────────────
+───────────────────────────   ────────────────────────────────────────    ──────────────────────────
+────────────────────────────  ──────────────────────────────────────────  ──────────────────────────
+─────────────────────────────  ────────────────────────────────────────   ──────────────────────────
+──────────────────────────────  ──────────          ──────────           ────────────────────────────
+───────────────────────────────  ──────                ──────           ─────────────────────────────
+────────────────────────────────                                      ──────────────────────────────
+────────────────────────────────                                      ──────────────────────────────
+───────────────────────────────                                        ─────────────────────────────
+──────────────────────────────                                          ────────────────────────────
+─────────────────────────────                                            ───────────────────────────
+────────────────────────────                                              ──────────────────────────
+───────────────────────────                                                ─────────────────────────
+───────────────────────────                                                 ────────────────────────
+──────────────────────────                                                   ───────────────────────
+──────────────────────────                                                    ──────────────────────
+──────────────────────────                                                    ──────────────────────
+──────────────────────────                                                   ───────────────────────
+───────────────────────────                                                  ───────────────────────
+────────────────────────────                                               ─────────────────────────
+──────────────────────────────                                           ───────────────────────────
+────────────────────────────────                                       ─────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────`;
 
-    // F3: Right paw tap — right paw reaches toward keyboard
-    const F3 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"               ▄▄▄▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▄▄▄               ",
-"             ▄▓▒░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░▒▓▄             ",
-"            ▓▒░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░▒▓            ",
-"           ▓▒░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░▒▒▒░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░▒▓███▓▒░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░▒░░░░░░░░░░░▒░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░░▒▒▒░░░░░▒▒▒░░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░░░░▒▒▒▒▒░░░░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░░░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ *░▒▒░░▒▒░░░▒▒░▒░░░ │▒▓▓░░░░░░░░░░░░░░░░▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░░▓▒░░░░░░░░░░░░░░▒▓░░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
-
-    // F4: Looks up from screen — head tilted up, thinking
-    const F4 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"               ▄▄▄▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▄▄▄               ",
-"             ▄▓▒░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░▒▓▄             ",
-"            ▓▒░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░▒▓            ",
-"           ▓▒░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░░░░░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░░░▒▒▒░░░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░▒▓███▓▒░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░▒░░░░░▒░░░░░▒░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░░▒▒▒░░░░░▒▒▒░░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░░░░▒▒▒▒▒░░░░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░░░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░░░░░░░░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░░░ │▒▓▓▒░░░░░░░░░░░░░░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓▒░░░░░░░░░░░░░░▒▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
-
-    // F5: Happy! — mouth open, ears perked, tail up
-    const F5 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"              ▄▄▄▓▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▓▄▄▄              ",
-"            ▄▓▒░░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░░▒▓▄            ",
-"           ▓▒░░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░░▒▓          ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░░░░░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░░░▒▒▒░░░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░▒▓███▓▒░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░▒▒░░░░░░░░░▒▒░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░▄▓▓▒░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░▓▒░░▒▓░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░▒▓▓▒░░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░░░ │▒▓▓▒░░░░░░░░░░░░░░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓▒░░░░░░░░░░░░░░▒▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
-
-    // F6: Tail wag other direction
-    const F6 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"              ▄▄▄▓▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▓▄▄▄              ",
-"            ▄▓▒░░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░░▒▓▄            ",
-"           ▓▒░░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░░▒▓          ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░░░░░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░░░▒▒▒░░░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░▒▓███▓▒░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░▒▒░░░░░░░░░▒▒░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░░░░░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░▒▓▓▄░░░░░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░▓▒░░▓▒░░░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░░░ │▒▓▓▒░░░░░░░░░▒▓▓▒░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓▒░░░░░░░░░░░░░░▒▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
-
-    // F7: Transition back — looking at screen again, settling
-    const F7 = [
-"                                                              ",
-"                           ▄▄▄▓▓▓▄▄                          ",
-"                        ▄▓▒░░░░░░▒▓▓▄                        ",
-"               ▄▄▄▓▓▄  ▓▒░░░░░░░░░░▒▓  ▄▓▓▄▄▄               ",
-"             ▄▓▒░░░▒▓▓▓▒░░░░░░░░░░░░▒▓▓▓▒░░░▒▓▄             ",
-"            ▓▒░░░░░░░▒▓░░░░░░░░░░░░░░▓▒░░░░░░░▒▓            ",
-"           ▓▒░░░░░░░░░▒░░░░░░░░░░░░░░▒░░░░░░░░░▒▓           ",
-"          ▓▒░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░▒▓          ",
-"          ▓░░░░░▓▓░░░░░░░░░░░░░░░░░░░░░░░▓▓░░░░░▓          ",
-"          ▓░░░░▓██▓░░░░░░░░░▒▒▒░░░░░░░░░▓██▓░░░░▓          ",
-"          ▓▒░░░░▓▓░░░░░░░░▒▓███▓▒░░░░░░░░▓▓░░░░▒▓          ",
-"           ▓░░░░░░░░░░░░░░░▒▓█▓▒░░░░░░░░░░░░░░░▓           ",
-"           ▓▒░░░░░░░░░░░░░░░░▒░░░░░░░░░░░░░░░░▒▓           ",
-"            ▓░░░░░░░░░░▒░░░░░░░░░░░▒░░░░░░░░░░▓            ",
-"            ▓▒░░░░░░░░░░▒▒▒░░░░░▒▒▒░░░░░░░░░░▒▓            ",
-"             ▓▒░░░░░░░░░░░░▒▒▒▒▒░░░░░░░░░░░░▒▓             ",
-"              ▓▓░░░░░░░░░░░░░░░░░░░░░░░░░░░░▓▓              ",
-"               ▓▓▒░░░░░░░░░░░░░░░░░░░░░░░░▒▓▓               ",
-"          ░░░░░░▒▓▓▓▒░░░░░░░░░░░░░░░░░░▒▓▓▓▒░░░░░░         ",
-"          ░░░░░░░░░▒▓▓▓▓▓▒▒░░░░░░▒▒▓▓▓▓▓▒░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░▒▓▓▓▓▓▓▓▓▓▓▓▓▒░░░░░░░░░░░░░         ",
-"          ░░░░░░░░░░░░░░░░▒▒▓▓▓▓▒▒░░░░░░░░░░▒▓▒░░░         ",
-"    ┌─────────────────────┐░░░░░░░░░░░░░░░░░▓▒░▓░░░         ",
-"    │ ░░░▒▒░░░▒▒▒░░░░▒░░ │░░░░░░░░░░░░░░░░░░▒▓░░░         ",
-"    │ ░▒▒░░▒▒░░░▒▒░▒░░░░ │▒▓▓▒░░░░░░░░░░░░░░▒▓▓▒░         ",
-"    │ ░░░▒░░░▒▒░░░░▒▒░░░ │░▒▓▒░░░░░░░░░░░░░░▒▓▒░░         ",
-"    └────────┬┬───────────┘░░░░░░░░░░░▄▓▓▓▓▄░░░░░░░         ",
-"  ───────────┘└──────────────────────────────────────         ",
-].join('\n');
-
-    // Blink variants — eyes shut (horizontal lines replace the eye blocks)
-    // We apply blink by string-replacing the eye characters in whatever frame is current
-    function applyBlink(frame) {
-      // Replace ▓██▓ (eye) with ▓▁▁▓ (shut) on both sides
-      return frame
-        .replace(/▓██▓(░+)▓██▓/g, '▓▁▁▓$1▓▁▁▓');
-    }
+    // Frame 3: Luna head turned left — mirror shift
+    const F3 = `
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────                                ────────────────────────────────────────────
+──────────────────────                                    ──────────────────────────────────────────
+────────────────────              ──────────────             ───────────────────────────────────────
+──────────────────          ─────────────────────────         ─────────────────────────────────────
+─────────────────         ─────────────────────────────        ────────────────────────────────────
+────────────────        ─────────────────────────────────       ───────────────────────────────────
+────────────────       ────────────────────────────────────      ──────────────────────────────────
+────────────────      ──────────────────────────────────────     ──────────────────────────────────
+────────────────     ───────────────────────────────────────     ──────────────────────────────────
+────────────────     ────────────────────────────────────────    ──────────────────────────────────
+────────────────    ──────────────────────────────────────────   ──────────────────────────────────
+────────────────    ──────────────────────────────────────────   ──────────────────────────────────
+────────────────    ──────────────────────────────────────────   ──────────────────────────────────
+────────────────   ───────────────────────────────────────────   ──────────────────────────────────
+────────────────  ─────────────────────────────────────────────  ──────────────────────────────────
+────────────────  ──────────────────────────────────────────────  ─────────────────────────────────
+────────────────  ──────────────────────────────────────────────  ─────────────────────────────────
+────────────────  ──────────────────────────────────────────────  ─────────────────────────────────
+───────────────  ────────────────────────────────────────────────  ────────────────────────────────
+───────────────  ──────          ──────────          ────────────  ────────────────────────────────
+───────────────  ─────            ─────────            ──────────  ────────────────────────────────
+───────────────  ────   ───────    ────────   ───────    ─────────  ───────────────────────────────
+───────────────  ────  ─────────   ────────  ─────────   ─────────  ───────────────────────────────
+───────────────  ────  ─────────   ────────  ─────────   ─────────  ───────────────────────────────
+───────────────  ────  ──────────  ────────  ──────────  ─────────  ───────────────────────────────
+───────────────  ─────  ─────────  ────────  ─────────  ──────────  ───────────────────────────────
+───────────────  ──────            ──────────           ──────────  ───────────────────────────────
+────────────────  ──────          ────────────          ──────────  ───────────────────────────────
+────────────────  ──────────────────────────────────────────────  ─────────────────────────────────
+────────────────  ──────────────────────────────────────────────  ─────────────────────────────────
+────────────────  ─────────────────────────────────────────────  ──────────────────────────────────
+────────────────  ─────────────────          ──────────────────  ──────────────────────────────────
+────────────────  ────────────────            ─────────────────  ──────────────────────────────────
+─────────────────  ────────────────          ─────────────────   ──────────────────────────────────
+─────────────────  ───────────────────────────────────────────   ──────────────────────────────────
+─────────────────  ─────────────────────────────────────────── ────────────────────────────────────
+──────────────────  ────────────────────────────────────────  ─────────────────────────────────────
+───────────────────           ──────────          ──────────  ─────────────────────────────────────
+────────────────────           ──────                ──────  ──────────────────────────────────────
+─────────────────────                                       ───────────────────────────────────────
+─────────────────────                                       ───────────────────────────────────────
+──────────────────────                                      ───────────────────────────────────────
+───────────────────────                                    ────────────────────────────────────────
+────────────────────────                                  ─────────────────────────────────────────
+─────────────────────────                                ──────────────────────────────────────────
+──────────────────────────                              ───────────────────────────────────────────
+───────────────────────────                            ────────────────────────────────────────────
+────────────────────────────                          ─────────────────────────────────────────────
+────────────────────────────                           ────────────────────────────────────────────
+────────────────────────────                           ────────────────────────────────────────────
+───────────────────────────                            ────────────────────────────────────────────
+───────────────────────────                           ─────────────────────────────────────────────
+──────────────────────────                           ──────────────────────────────────────────────
+─────────────────────────                          ────────────────────────────────────────────────
+───────────────────────                          ──────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────
+────────────────────────────────────────────────────────────────────────────────────────────────────`;
 
     // ══════════════════════════════════════════════════════════
     //  ANIMATION ENGINE
     // ══════════════════════════════════════════════════════════
 
-    const asciiEl = document.getElementById('luna-ascii');
-    const taglineEl = document.getElementById('tagline-text');
+    const artEl = document.getElementById('luna-art');
 
-    // Frame sequence with hold durations (ms)
     const sequence = [
-      { frame: F1, duration: 1500 },
-      { frame: F2, duration: 300 },
-      { frame: F3, duration: 300 },
-      { frame: F2, duration: 300 },
-      { frame: F3, duration: 300 },
-      { frame: F1, duration: 400 },
-      { frame: F4, duration: 2000 },
-      { frame: F5, duration: 1200 },
-      { frame: F6, duration: 800 },
-      { frame: F5, duration: 800 },
-      { frame: F7, duration: 1000 },
+      { frame: F1, duration: 3000 },
+      { frame: F2, duration: 2000 },
+      { frame: F1, duration: 2500 },
+      { frame: F3, duration: 2000 },
+      { frame: F1, duration: 3000 },
+      { frame: F2, duration: 1500 },
+      { frame: F3, duration: 1500 },
+      { frame: F1, duration: 4000 },
     ];
 
-    let currentFrameIndex = 0;
-    let currentFrame = F1;
-    let isBlinking = false;
+    let frameIndex = 0;
 
-    function renderFrame() {
-      let frame = currentFrame;
-      if (isBlinking) {
-        frame = applyBlink(frame);
-      }
-      asciiEl.textContent = frame;
+    function render() {
+      const step = sequence[frameIndex];
+      artEl.textContent = step.frame;
+      frameIndex = (frameIndex + 1) % sequence.length;
+      setTimeout(render, step.duration);
     }
 
-    function nextFrame() {
-      const step = sequence[currentFrameIndex];
-      currentFrame = step.frame;
-      renderFrame();
-
-      currentFrameIndex = (currentFrameIndex + 1) % sequence.length;
-      setTimeout(nextFrame, step.duration);
-    }
-
-    // Independent blink timer
-    function blinkLoop() {
-      const nextBlink = 3000 + Math.random() * 3000; // 3-6 seconds
-      setTimeout(() => {
-        isBlinking = true;
-        renderFrame();
-        setTimeout(() => {
-          isBlinking = false;
-          renderFrame();
-          blinkLoop();
-        }, 150);
-      }, nextBlink);
-    }
-
-    // ── Typing effect for tagline ──
-    const taglineText = "your loyal assistant";
-    let taglineIndex = 0;
-
-    function typeTagline() {
-      if (taglineIndex <= taglineText.length) {
-        taglineEl.textContent = taglineText.slice(0, taglineIndex);
-        taglineIndex++;
-        setTimeout(typeTagline, 60 + Math.random() * 40);
-      }
-    }
-
-    // ── Scroll fade-in for features ──
-    function setupScrollObserver() {
-      const features = document.querySelectorAll('.feature');
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry, i) => {
-          if (entry.isIntersecting) {
-            setTimeout(() => {
-              entry.target.classList.add('visible');
-            }, i * 100);
-            observer.unobserve(entry.target);
-          }
-        });
-      }, { threshold: 0.1 });
-
-      features.forEach(f => observer.observe(f));
-    }
-
-    // ── Boot sequence ──
-    function boot() {
-      // Start the animation
-      nextFrame();
-      blinkLoop();
-
-      // Type the tagline after a short delay
-      setTimeout(typeTagline, 1500);
-
-      // Setup scroll animations
-      setupScrollObserver();
-    }
-
-    // Go
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', boot);
-    } else {
-      boot();
-    }
+    // Boot
+    render();
   </script>
 </body>
 </html>
