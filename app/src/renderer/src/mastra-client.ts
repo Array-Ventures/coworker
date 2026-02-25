@@ -746,7 +746,7 @@ export async function startMcpOAuth(
   const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/oauth/start`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ serverId, serverUrl }),
+    body: JSON.stringify({ serverId, serverUrl, callbackBaseUrl: MASTRA_BASE_URL }),
   })
   return res.json()
 }

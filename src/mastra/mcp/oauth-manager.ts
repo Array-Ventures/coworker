@@ -25,15 +25,17 @@ setInterval(() => {
   }
 }, 60_000);
 
-function getRedirectUrl(): string {
-  const publicUrl =
-    process.env.COWORKER_PUBLIC_URL ||
-    `http://localhost:${process.env.PORT || 4111}`;
-  return `${publicUrl.replace(/\/$/, '')}/mcp-oauth/callback`;
+function getRedirectUrl(callbackBaseUrl?: string): string {
+  const base =
+    callbackBaseUrl || `http://localhost:${process.env.PORT || 4111}`;
+  return `${base.replace(/\/$/, '')}/mcp-oauth/callback`;
 }
 
-function createProvider(serverId: string): MCPOAuthClientProvider {
-  const redirectUrl = getRedirectUrl();
+function createProvider(
+  serverId: string,
+  callbackBaseUrl?: string,
+): MCPOAuthClientProvider {
+  const redirectUrl = getRedirectUrl(callbackBaseUrl);
   return new MCPOAuthClientProvider({
     redirectUrl,
     clientMetadata: {
@@ -53,8 +55,9 @@ function createProvider(serverId: string): MCPOAuthClientProvider {
 export async function startMcpOAuth(
   serverId: string,
   serverUrl: string,
+  callbackBaseUrl?: string,
 ): Promise<{ authUrl: string }> {
-  const provider = createProvider(serverId);
+  const provider = createProvider(serverId, callbackBaseUrl);
 
   // If we already have valid tokens, no auth needed
   const existingTokens = await provider.tokens();

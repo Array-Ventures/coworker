@@ -125,12 +125,12 @@ export function mcpRoutes(agentConfig: AgentConfigManager) {
     registerApiRoute('/mcp-servers/oauth/start', {
       method: 'POST',
       handler: async (c) => {
-        const { serverId, serverUrl } = await c.req.json();
+        const { serverId, serverUrl, callbackBaseUrl } = await c.req.json();
         if (!serverId || !serverUrl) {
           return c.json({ error: 'serverId and serverUrl required' }, 400);
         }
         try {
-          const { authUrl } = await startMcpOAuth(serverId, serverUrl);
+          const { authUrl } = await startMcpOAuth(serverId, serverUrl, callbackBaseUrl);
           if (!authUrl) {
             return c.json({ ok: true, alreadyAuthorized: true });
           }
