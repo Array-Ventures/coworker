@@ -4,6 +4,8 @@
  */
 import { MCPClient } from '@mastra/mcp';
 import { loadMcpServers, saveMcpServers } from './config';
+import { getOAuthProvider } from './oauth-manager';
+import { hasOAuthTokens } from './oauth-storage';
 import type { McpServerConfig } from './types';
 
 let _client: MCPClient | null = null;
@@ -20,11 +22,13 @@ function buildServerDefs(configs: McpServerConfig[]): Record<string, any> {
         env: cfg.env || {},
       };
     } else if (cfg.type === 'http' && cfg.url) {
+      const authProvider = getOAuthProvider(cfg.id);
       servers[cfg.name] = {
         url: new URL(cfg.url),
         ...(cfg.headers && Object.keys(cfg.headers).length > 0
           ? { requestInit: { headers: cfg.headers } }
           : {}),
+        ...(authProvider ? { authProvider } : {}),
       };
     }
   }
@@ -58,7 +62,13 @@ export async function getMcpToolsets(): Promise<Record<string, Record<string, an
     return {};
   }
 
-  const hash = JSON.stringify(enabled);
+  // Include OAuth token presence in hash so MCPClient recreates when tokens
+  // are first obtained (attaching authProvider), but NOT on every token refresh
+  const oauthFlags = enabled
+    .filter((c) => c.type === 'http')
+    .map((c) => `${c.id}:${hasOAuthTokens(c.id)}`)
+    .join(',');
+  const hash = JSON.stringify(enabled) + '|' + oauthFlags;
   if (_client && _configHash === hash) {
     try {
       const toolsets = await _client.listToolsets();

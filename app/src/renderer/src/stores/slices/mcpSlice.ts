@@ -1,7 +1,15 @@
 import type { StateCreator } from 'zustand'
 import type { AppStore } from '../useAppStore'
 import type { McpServerConfig, ExposedMcpServerInfo } from '../../mastra-client'
-import { fetchMcpServers, saveMcpServers, testMcpServer, fetchExposedMcpServers } from '../../mastra-client'
+import {
+  fetchMcpServers,
+  saveMcpServers,
+  testMcpServer,
+  fetchExposedMcpServers,
+  startMcpOAuth,
+  pollMcpOAuthStatus,
+  revokeMcpOAuth,
+} from '../../mastra-client'
 
 export interface McpSlice {
   mcpServers: McpServerConfig[]
@@ -17,7 +25,10 @@ export interface McpSlice {
   toggleMcpServer: (id: string) => Promise<void>
   testMcpConnection: (
     server: McpServerConfig,
-  ) => Promise<{ ok: boolean; tools?: string[]; error?: string }>
+  ) => Promise<{ ok: boolean; tools?: string[]; error?: string; oauthRequired?: boolean }>
+  startOAuth: (serverId: string, serverUrl: string) => Promise<{ authUrl?: string }>
+  pollOAuth: (serverId: string) => Promise<boolean>
+  revokeOAuth: (serverId: string) => Promise<void>
 }
 
 let _loadMcp: Promise<void> | null = null
@@ -99,5 +110,28 @@ export const createMcpSlice: StateCreator<AppStore, [], [], McpSlice> = (set, ge
 
   testMcpConnection: async (server) => {
     return testMcpServer(server)
+  },
+
+  startOAuth: async (serverId, serverUrl) => {
+    const result = await startMcpOAuth(serverId, serverUrl)
+    if (result.authUrl) {
+      window.open(result.authUrl, '_blank')
+    }
+    return { authUrl: result.authUrl }
+  },
+
+  pollOAuth: async (serverId) => {
+    const result = await pollMcpOAuthStatus(serverId)
+    if (result.ok) {
+      const servers = await fetchMcpServers()
+      set({ mcpServers: servers })
+    }
+    return result.ok
+  },
+
+  revokeOAuth: async (serverId) => {
+    await revokeMcpOAuth(serverId)
+    const servers = await fetchMcpServers()
+    set({ mcpServers: servers })
   },
 })

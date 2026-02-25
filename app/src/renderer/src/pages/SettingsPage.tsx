@@ -1942,8 +1942,12 @@ function McpServerCard({
   onDelete: () => void
 }) {
   const testMcpConnection = useAppStore((s) => s.testMcpConnection)
+  const startOAuth = useAppStore((s) => s.startOAuth)
+  const pollOAuth = useAppStore((s) => s.pollOAuth)
+  const revokeOAuth = useAppStore((s) => s.revokeOAuth)
   const [testing, setTesting] = useState(false)
-  const [testResult, setTestResult] = useState<{ ok: boolean; tools?: string[]; error?: string } | null>(null)
+  const [testResult, setTestResult] = useState<{ ok: boolean; tools?: string[]; error?: string; oauthRequired?: boolean } | null>(null)
+  const [authorizing, setAuthorizing] = useState(false)
 
   const handleTest = async () => {
     setTesting(true)
@@ -1956,6 +1960,34 @@ function McpServerCard({
     } finally {
       setTesting(false)
     }
+  }
+
+  const handleAuthorize = async () => {
+    if (!server.url) return
+    setAuthorizing(true)
+    try {
+      await startOAuth(server.id, server.url)
+      // Poll every 2s for up to 5 minutes
+      const pollInterval = setInterval(async () => {
+        const ok = await pollOAuth(server.id)
+        if (ok) {
+          clearInterval(pollInterval)
+          setAuthorizing(false)
+          setTestResult(null)
+        }
+      }, 2000)
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        setAuthorizing(false)
+      }, 5 * 60_000)
+    } catch {
+      setAuthorizing(false)
+    }
+  }
+
+  const handleRevoke = async () => {
+    await revokeOAuth(server.id)
+    setTestResult(null)
   }
 
   const preview = server.type === 'stdio'
@@ -1973,6 +2005,15 @@ function McpServerCard({
           >
             {server.type === 'stdio' ? 'Stdio' : 'URL'}
           </span>
+          {server.oauthStatus === 'authorized' && (
+            <span
+              className="inline-flex items-center gap-1 font-secondary text-[11px] font-medium rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              style={{ padding: '1px 8px' }}
+            >
+              <span className="material-icon" style={{ fontSize: 12 }}>check_circle</span>
+              OAuth
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -1997,11 +2038,38 @@ function McpServerCard({
       </div>
       <p className="font-mono text-[12px] text-muted-dim truncate">{preview}</p>
       {testResult && (
-        <p className={`mt-2 font-secondary text-[12px] ${testResult.ok ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
-          {testResult.ok
-            ? `${testResult.tools?.length ?? 0} tool${testResult.tools?.length === 1 ? '' : 's'} available`
-            : testResult.error || 'Connection failed'}
-        </p>
+        <div className="mt-2">
+          {testResult.ok ? (
+            <p className="font-secondary text-[12px] text-emerald-700 dark:text-emerald-400">
+              {testResult.tools?.length ?? 0} tool{testResult.tools?.length === 1 ? '' : 's'} available
+            </p>
+          ) : testResult.oauthRequired ? (
+            <div className="flex items-center gap-2">
+              <p className="font-secondary text-[12px] text-amber-600 dark:text-amber-400">OAuth authorization required</p>
+              <button
+                onClick={handleAuthorize}
+                disabled={authorizing}
+                className="font-secondary text-[12px] font-medium px-3 py-0.5 rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {authorizing ? 'Waiting...' : 'Authorize'}
+              </button>
+            </div>
+          ) : (
+            <p className="font-secondary text-[12px] text-red-500 dark:text-red-400">
+              {testResult.error || 'Connection failed'}
+            </p>
+          )}
+        </div>
+      )}
+      {server.oauthStatus === 'authorized' && !testResult?.oauthRequired && (
+        <div className="mt-1">
+          <button
+            onClick={handleRevoke}
+            className="font-secondary text-[11px] text-muted hover:text-red-500 transition-colors"
+          >
+            Revoke OAuth
+          </button>
+        </div>
       )}
     </div>
   )
@@ -2091,8 +2159,6 @@ function ExposedMcpSection() {
           Add this to your MCP client configuration (Cursor, Claude Desktop, etc.)
         </p>
       </div>
-
-      <ApiKeysSection />
     </div>
   )
 }
@@ -2221,11 +2287,13 @@ import AdvancedInstructions from '../components/settings/AdvancedInstructions'
 import AdvancedServer from '../components/settings/AdvancedServer'
 import AdvancedEnvVars from '../components/settings/AdvancedEnvVars'
 import AdvancedUpdates from '../components/settings/AdvancedUpdates'
+import AdvancedBrowser from '../components/settings/AdvancedBrowser'
 
 const advSubTabs = [
   { label: 'Server', icon: 'dns' },
   { label: 'Instructions', icon: 'description' },
   { label: 'Environment', icon: 'key' },
+  { label: 'Browser', icon: 'language' },
   { label: 'Updates', icon: 'update' },
 ]
 
@@ -2237,6 +2305,7 @@ function AdvancedContent() {
       {subTab === 'Instructions' && <AdvancedInstructions />}
       {subTab === 'Server' && <AdvancedServer />}
       {subTab === 'Environment' && <AdvancedEnvVars />}
+      {subTab === 'Browser' && <AdvancedBrowser />}
       {subTab === 'Updates' && <AdvancedUpdates />}
     </div>
   )

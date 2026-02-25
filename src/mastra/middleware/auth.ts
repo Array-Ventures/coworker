@@ -16,7 +16,7 @@ export function createAuthMiddleware() {
 
   return createMiddleware(async (c, next) => {
     const path = c.req.path;
-    if (path === '/health') return next();
+    if (path === '/health' || path === '/mcp-oauth/callback') return next();
 
     const playgroundToken = c.req.header('X-Playground-Access');
     if (playgroundToken === token) return next();

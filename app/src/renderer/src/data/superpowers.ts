@@ -68,6 +68,11 @@ export const SUPERPOWERS: SuperpowerDef[] = [
           description: 'Session name for auto-persisting browser login state (cookies/localStorage)',
           required: false,
         },
+        AGENT_BROWSER_ENCRYPTION_KEY: {
+          value: '',
+          description: 'Optional AES-256 key (64 hex chars) to encrypt saved browser sessions',
+          required: false,
+        },
       },
     },
   },

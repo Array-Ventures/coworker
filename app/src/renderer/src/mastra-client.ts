@@ -649,6 +649,52 @@ export async function installSuperpowerRuntime(install: string): Promise<{ ok: b
   return res.json()
 }
 
+// ── Browser Login ──
+
+export async function startBrowserLogin(url: string): Promise<{ ok: boolean; url?: string; title?: string; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/browser-login/start`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  return res.json()
+}
+
+export function getBrowserLoginFramesUrl(): string {
+  return `${MASTRA_BASE_URL}/browser-login/frames`
+}
+
+export async function sendBrowserLoginInput(event: { type: string; params: unknown }): Promise<{ ok: boolean }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/browser-login/input`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(event),
+  })
+  return res.json()
+}
+
+export async function navigateBrowserLogin(url: string): Promise<{ ok: boolean; url?: string; title?: string; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/browser-login/navigate`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  })
+  return res.json()
+}
+
+export async function saveBrowserLoginAndClose(): Promise<{ ok: boolean; saved?: boolean; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/browser-login/save-close`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+  })
+  return res.json()
+}
+
+export async function getBrowserLoginStatus(): Promise<{ active: boolean; screencasting: boolean }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/browser-login/status`, { headers: authHeaders() })
+  return res.json()
+}
+
 // ── MCP Servers ──
 
 export interface McpServerConfig {
@@ -661,6 +707,7 @@ export interface McpServerConfig {
   env?: Record<string, string>
   url?: string
   headers?: Record<string, string>
+  oauthStatus?: 'none' | 'authorized'
 }
 
 export async function fetchMcpServers(): Promise<McpServerConfig[]> {
@@ -681,11 +728,45 @@ export async function saveMcpServers(servers: McpServerConfig[]): Promise<McpSer
 
 export async function testMcpServer(
   config: McpServerConfig,
-): Promise<{ ok: boolean; tools?: string[]; error?: string }> {
+): Promise<{ ok: boolean; tools?: string[]; error?: string; oauthRequired?: boolean }> {
   const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/test`, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
+  })
+  return res.json()
+}
+
+// ── MCP OAuth ──
+
+export async function startMcpOAuth(
+  serverId: string,
+  serverUrl: string,
+): Promise<{ ok: boolean; authUrl?: string; alreadyAuthorized?: boolean; error?: string }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/oauth/start`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId, serverUrl }),
+  })
+  return res.json()
+}
+
+export async function pollMcpOAuthStatus(
+  serverId: string,
+): Promise<{ ok: boolean; pending: boolean }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/oauth/poll`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId }),
+  })
+  return res.json()
+}
+
+export async function revokeMcpOAuth(serverId: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${MASTRA_BASE_URL}/mcp-servers/oauth/revoke`, {
+    method: 'POST',
+    headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ serverId }),
   })
   return res.json()
 }

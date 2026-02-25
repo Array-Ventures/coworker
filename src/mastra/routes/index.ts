@@ -12,6 +12,7 @@ import { messagingRoutes } from './messaging';
 import { skillsRoutes } from './skills';
 import { a2aRoutes } from './a2a';
 import { superpowersRoutes } from './superpowers';
+import { browserLoginRoutes } from './browser-login';
 
 export function createRoutes(deps: {
   taskManager: ScheduledTaskManager;
@@ -30,5 +31,6 @@ export function createRoutes(deps: {
     ...skillsRoutes,
     ...a2aRoutes,
     ...superpowersRoutes,
+    ...browserLoginRoutes,
   ];
 }
