@@ -1,5 +1,4 @@
 import { registerApiRoute } from '@mastra/core/server';
-import { BrowserManager } from 'agent-browser/dist/browser.js';
 import fs from 'fs';
 import path from 'path';
 import { agentConfig } from '../config/agent-config';
@@ -20,7 +19,9 @@ import { WORKSPACE_PATH } from '../config/paths';
  */
 
 // Singleton login session — only one active at a time
-let manager: BrowserManager | null = null;
+// BrowserManager is dynamically imported so PLAYWRIGHT_BROWSERS_PATH can be
+// set in process.env *before* playwright-core caches its registry directory.
+let manager: any = null;
 let frameCallback: ((frame: any) => void) | null = null;
 let frameListeners = new Set<(frame: any) => void>();
 
@@ -67,13 +68,15 @@ export const browserLoginRoutes = [
       if (!url) return c.json({ ok: false, error: 'Missing url' }, 400);
 
       try {
-        // Playwright reads PLAYWRIGHT_BROWSERS_PATH from process.env to find
-        // Chromium binaries — no API alternative. Sync from sandbox env if needed.
+        // Playwright reads PLAYWRIGHT_BROWSERS_PATH at *import time* (module-level
+        // IIFE in registry/index.js). We must set the env var BEFORE the first
+        // dynamic import so playwright-core caches the correct path.
         const env = agentConfig.getSandboxEnv();
-        if (env.PLAYWRIGHT_BROWSERS_PATH && !process.env.PLAYWRIGHT_BROWSERS_PATH) {
+        if (env.PLAYWRIGHT_BROWSERS_PATH) {
           process.env.PLAYWRIGHT_BROWSERS_PATH = env.PLAYWRIGHT_BROWSERS_PATH;
         }
 
+        const { BrowserManager } = await import('agent-browser/dist/browser.js');
         manager = new BrowserManager();
 
         // Load existing session state if available

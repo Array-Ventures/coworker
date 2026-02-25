@@ -1,4 +1,5 @@
 import { registerApiRoute } from '@mastra/core/server';
+import { discoverOAuthProtectedResourceMetadata } from '@mastra/mcp';
 import type { AgentConfigManager, McpServerConfig } from '../config/agent-config';
 import {
   startMcpOAuth,
@@ -8,6 +9,7 @@ import {
   clearOAuthData,
   disconnectMcp,
 } from '../mcp';
+import { getOAuthProvider } from '../mcp/oauth-manager';
 
 export function mcpRoutes(agentConfig: AgentConfigManager) {
   return [
@@ -65,6 +67,26 @@ export function mcpRoutes(agentConfig: AgentConfigManager) {
         const body = (await c.req.json()) as McpServerConfig;
         try {
           const { MCPClient } = await import('@mastra/mcp');
+
+          // For HTTP servers without existing OAuth tokens, check if the server
+          // requires OAuth via RFC 9728 Protected Resource Metadata discovery
+          if (body.type === 'http' && body.url && !hasOAuthTokens(body.id)) {
+            try {
+              const metadata = await discoverOAuthProtectedResourceMetadata(body.url);
+              if (metadata?.authorization_servers?.length) {
+                return c.json({
+                  ok: false,
+                  error: 'OAuth authorization required',
+                  oauthRequired: true,
+                });
+              }
+            } catch {
+              // No protected resource metadata — server may not need OAuth, proceed with test
+            }
+          }
+
+          // Build server definition, include authProvider if tokens exist
+          const authProvider = body.type === 'http' ? getOAuthProvider(body.id) : undefined;
           const serverDef: any =
             body.type === 'stdio'
               ? { command: body.command, args: body.args || [], env: body.env || {} }
@@ -73,6 +95,7 @@ export function mcpRoutes(agentConfig: AgentConfigManager) {
                   ...(body.headers && Object.keys(body.headers).length > 0
                     ? { requestInit: { headers: body.headers } }
                     : {}),
+                  ...(authProvider ? { authProvider } : {}),
                 };
 
           const testClient = new MCPClient({
@@ -89,15 +112,9 @@ export function mcpRoutes(agentConfig: AgentConfigManager) {
             await testClient.disconnect();
           }
         } catch (err: any) {
-          const msg = err.message || 'Connection failed';
-          const isOAuth =
-            msg.includes('Unauthorized') ||
-            msg.includes('401') ||
-            msg.includes('UnauthorizedError');
           return c.json({
             ok: false,
-            error: isOAuth ? 'OAuth authorization required' : msg,
-            oauthRequired: isOAuth,
+            error: err.message || 'Connection failed',
           });
         }
       },
