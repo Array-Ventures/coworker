@@ -1,15 +1,15 @@
 import { registerApiRoute } from '@mastra/core/server';
 import { BrowserManager } from 'agent-browser/dist/browser.js';
-import {
-  getAutoStateFilePath,
-  readStateFile,
-  writeStateFile,
-  ensureSessionsDir,
-} from 'agent-browser/dist/state-utils.js';
+import fs from 'fs';
+import path from 'path';
 import { agentConfig } from '../config/agent-config';
+import { WORKSPACE_PATH } from '../config/paths';
 
 /**
  * Browser Login — programmatic screencasting for interactive login sessions.
+ *
+ * Uses BrowserManager API directly (no CLI daemon). Session state is saved to
+ * the same location the agent's sandbox uses: $WORKSPACE/.agent-browser/sessions/
  *
  * Flow:
  *   1. POST /browser-login/start   → launch browser + start screencast
@@ -24,23 +24,34 @@ let manager: BrowserManager | null = null;
 let frameCallback: ((frame: any) => void) | null = null;
 let frameListeners = new Set<(frame: any) => void>();
 
+/**
+ * Build the session state file path using WORKSPACE_PATH directly.
+ * The agent's sandbox runs with HOME=$WORKSPACE, so agent-browser CLI
+ * saves sessions to $WORKSPACE/.agent-browser/sessions/{name}-{id}.json.
+ * We match that path exactly so both server and agent share the same state.
+ */
 function getSessionStatePath(): string | null {
   const env = agentConfig.getSandboxEnv();
   const sessionName = env.AGENT_BROWSER_SESSION_NAME || process.env.AGENT_BROWSER_SESSION_NAME;
-  if (!sessionName) return null;
-  ensureSessionsDir();
-  return getAutoStateFilePath(sessionName, 'default');
+  if (!sessionName || !/^[a-zA-Z0-9_-]+$/.test(sessionName)) return null;
+  const sessionsDir = path.join(WORKSPACE_PATH, '.agent-browser', 'sessions');
+  fs.mkdirSync(sessionsDir, { recursive: true, mode: 0o700 });
+  return path.join(sessionsDir, `${sessionName}-default.json`);
 }
 
 function loadExistingState(): object | null {
   const statePath = getSessionStatePath();
-  if (!statePath) return null;
+  if (!statePath || !fs.existsSync(statePath)) return null;
   try {
-    const { data } = readStateFile(statePath);
-    return data as object;
+    return JSON.parse(fs.readFileSync(statePath, 'utf-8'));
   } catch {
     return null;
   }
+}
+
+function saveState(statePath: string, state: object): void {
+  fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  fs.chmodSync(statePath, 0o600);
 }
 
 export const browserLoginRoutes = [
@@ -56,6 +67,13 @@ export const browserLoginRoutes = [
       if (!url) return c.json({ ok: false, error: 'Missing url' }, 400);
 
       try {
+        // Playwright reads PLAYWRIGHT_BROWSERS_PATH from process.env to find
+        // Chromium binaries — no API alternative. Sync from sandbox env if needed.
+        const env = agentConfig.getSandboxEnv();
+        if (env.PLAYWRIGHT_BROWSERS_PATH && !process.env.PLAYWRIGHT_BROWSERS_PATH) {
+          process.env.PLAYWRIGHT_BROWSERS_PATH = env.PLAYWRIGHT_BROWSERS_PATH;
+        }
+
         manager = new BrowserManager();
 
         // Load existing session state if available
@@ -212,9 +230,9 @@ export const browserLoginRoutes = [
           const context = manager.getContext();
           if (context) {
             const state = await context.storageState();
-            const { encrypted } = writeStateFile(statePath, state);
+            saveState(statePath, state);
             saved = true;
-            console.log(`[browser-login] Session saved: ${statePath}${encrypted ? ' (encrypted)' : ''}`);
+            console.log(`[browser-login] Session saved: ${statePath}`);
           }
         }
 
