@@ -57,6 +57,16 @@ export async function startMcpOAuth(
   serverUrl: string,
   callbackBaseUrl?: string,
 ): Promise<{ authUrl: string }> {
+  // If the redirect URL changed (e.g. switched from localhost to Railway),
+  // clear stale client_info so DCR re-registers with the correct redirect URI
+  const storage = createFileOAuthStorage(serverId);
+  const redirectUrl = getRedirectUrl(callbackBaseUrl);
+  const storedRedirect = storage.get('redirect_url');
+  if (storedRedirect && storedRedirect !== redirectUrl) {
+    storage.delete('client_info');
+  }
+  storage.set('redirect_url', redirectUrl);
+
   const provider = createProvider(serverId, callbackBaseUrl);
 
   // If we already have valid tokens, no auth needed
