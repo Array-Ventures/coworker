@@ -15,8 +15,12 @@ const CLIENT_NAME = 'Coworker AI';
  */
 const wrappedFetch: typeof fetch = async (input, init) => {
   const res = await fetch(input, init);
+  if (!res.ok) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const body = await res.clone().text();
+    console.error(`[mcp-oauth] HTTP ${res.status} from ${url}: ${body}`);
+  }
   if (res instanceof Response) return res;
-  // Re-wrap as a proper globalThis.Response
   return new Response(res.body, {
     status: res.status,
     statusText: res.statusText,
