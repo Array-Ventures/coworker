@@ -118,7 +118,12 @@ export async function handleMcpOAuthCallback(
   code: string,
   _state: string,
 ): Promise<{ serverId: string | null; error?: string }> {
+  if (pendingFlows.size === 0) {
+    return { serverId: null, error: 'No pending OAuth flow. Try authorizing again.' };
+  }
+
   // Try each pending flow — state matching happens inside auth()
+  const errors: string[] = [];
   for (const [serverId, flow] of pendingFlows) {
     try {
       const result = await auth(flow.provider, {
@@ -129,12 +134,13 @@ export async function handleMcpOAuthCallback(
         pendingFlows.delete(serverId);
         return { serverId };
       }
-    } catch (err) {
-      console.error(`[mcp-oauth] Token exchange failed for ${serverId}:`, err);
-      continue;
+    } catch (err: any) {
+      const msg = err?.message || String(err);
+      console.error(`[mcp-oauth] Token exchange failed for ${serverId}:`, msg);
+      errors.push(msg);
     }
   }
-  return { serverId: null, error: 'No matching pending OAuth flow found' };
+  return { serverId: null, error: errors[0] || 'Token exchange failed' };
 }
 
 /**
