@@ -2061,13 +2061,13 @@ function McpServerCard({
           )}
         </div>
       )}
-      {server.oauthStatus === 'authorized' && !testResult?.oauthRequired && (
+      {(server.oauthStatus === 'authorized' || server.oauthStatus === 'pending') && (
         <div className="mt-1">
           <button
             onClick={handleRevoke}
             className="font-secondary text-[11px] text-muted hover:text-red-500 transition-colors"
           >
-            Revoke OAuth
+            {server.oauthStatus === 'authorized' ? 'Revoke OAuth' : 'Clear OAuth Data'}
           </button>
         </div>
       )}

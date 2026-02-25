@@ -52,6 +52,11 @@ export function hasOAuthTokens(serverId: string): boolean {
   return !!readAll()[serverId]?.tokens;
 }
 
+/** Check if a server has any stored OAuth data (tokens, client_info, etc). */
+export function hasOAuthData(serverId: string): boolean {
+  return !!readAll()[serverId];
+}
+
 /** Remove all OAuth data for a server. */
 export function clearOAuthData(serverId: string): void {
   const all = readAll();

@@ -5,5 +5,5 @@ export {
   handleMcpOAuthCallback,
   pollMcpOAuth,
 } from './oauth-manager';
-export { hasOAuthTokens, clearOAuthData } from './oauth-storage';
+export { hasOAuthTokens, hasOAuthData, clearOAuthData } from './oauth-storage';
 export type { McpServerConfig, McpFileConfig } from './types';

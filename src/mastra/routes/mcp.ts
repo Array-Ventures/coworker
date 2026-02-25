@@ -6,6 +6,7 @@ import {
   handleMcpOAuthCallback,
   pollMcpOAuth,
   hasOAuthTokens,
+  hasOAuthData,
   clearOAuthData,
   disconnectMcp,
 } from '../mcp';
@@ -23,7 +24,9 @@ export function mcpRoutes(agentConfig: AgentConfigManager) {
             s.type === 'http' && s.url
               ? hasOAuthTokens(s.id)
                 ? 'authorized'
-                : 'none'
+                : hasOAuthData(s.id)
+                  ? 'pending'
+                  : 'none'
               : 'none',
         }));
         return c.json({ servers: enriched });

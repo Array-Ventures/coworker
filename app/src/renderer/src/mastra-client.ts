@@ -707,7 +707,7 @@ export interface McpServerConfig {
   env?: Record<string, string>
   url?: string
   headers?: Record<string, string>
-  oauthStatus?: 'none' | 'authorized'
+  oauthStatus?: 'none' | 'authorized' | 'pending'
 }
 
 export async function fetchMcpServers(): Promise<McpServerConfig[]> {
