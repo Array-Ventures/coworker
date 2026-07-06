@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/array-ventures-coworker-badge.png)](https://mseep.ai/app/array-ventures-coworker)
+
 # Coworker
 
 Open-source AI agent built with [Mastra](https://mastra.ai). Acts as an AI team member that handles tasks, answers questions, and manages workflows via chat. Supports OpenAI, Anthropic, Google Gemini, NVIDIA, Groq, Kimi, and any OpenAI-compatible provider.
